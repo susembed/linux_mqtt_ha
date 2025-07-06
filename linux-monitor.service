@@ -1,0 +1,20 @@
+[Unit]
+Description=Linux System Monitor MQTT Publisher
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/mqtt_linux_monitoring
+Environment=MQTT_BROKER=localhost
+Environment=MQTT_PORT=1883
+Environment=MQTT_USER=
+Environment=MQTT_PASS=
+ExecStart=/home/pi/mqtt_linux_monitoring/mqtt_linux_monitoring.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
