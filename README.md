@@ -1,175 +1,236 @@
-# Linux System Monitoring with MQTT and Home Assistant
+# Linux MQTT Home Assistant Monitor (Python Version)
 
-This script monitors various Linux system resources and publishes them to an MQTT broker with Home Assistant autodiscovery support.
+A comprehensive Python script that monitors Linux system metrics and publishes them to an MQTT broker with Home Assistant autodiscovery support.
 
 ## Features
 
-### Monitored Metrics
-- **CPU**: Usage percentage and temperature
-- **Memory**: Usage percentage and used/total info
-- **System**: Load average and uptime
-- **Disk**: Temperature, SMART health status, I/O throughput, and utilization
+- **CPU Monitoring**: Usage percentage and temperature
+- **Memory Monitoring**: Usage percentage and available/total memory
+- **System Load**: 1-minute load average
+- **Disk Monitoring**: Temperature, SMART health status, and I/O statistics (read/write speeds, utilization)
+- **Home Assistant Integration**: Automatic device discovery with proper device classes and icons
+- **Efficient Data Collection**: Single iostat call for CPU and all disk metrics
+- **Configurable Intervals**: Fast updates (10s) for real-time metrics, slow updates (1h) for SMART data
+- **Dry Run Mode**: Test configuration without publishing to MQTT
+- **Systemd Service**: Run as a background service with automatic restart
 
-### Publishing Intervals
-- **One-time** (at startup): System uptime
-- **Every 10 seconds**: CPU usage (averaged), memory, disk temperature, disk I/O metrics (averaged)
-- **Every hour**: Disk SMART health data
+## Requirements
 
-**Note**: CPU usage and disk I/O metrics are now averaged over the 10-second interval using `iostat`, providing more accurate and stable readings compared to instantaneous measurements.
+### System Dependencies
+- `smartmontools` - For disk SMART data
+- `lm-sensors` - For CPU temperature
+- `sysstat` - For iostat (CPU and disk I/O)
+- `python3` and `python3-pip`
 
-### Home Assistant Integration
-- Automatic device discovery via MQTT Discovery
-- Sensors appear automatically in Home Assistant
-- Proper device grouping under a single device entity
+### Python Dependencies
+- `paho-mqtt` - MQTT client library
 
-## Dependencies
+## Quick Installation
 
-The script requires the following packages:
-```bash
-sudo apt-get install mosquitto-clients smartmontools lm-sensors sysstat bc
-```
-
-## Installation & Setup
-
-1. **Clone or download the script files**
-2. **Install dependencies** (see above)
-3. **Configure MQTT settings**:
+1. **Clone or download the files**:
    ```bash
-   cp config.sh my-config.sh
-   nano my-config.sh  # Edit with your MQTT broker details
-   ```
-4. **Make scripts executable**:
-   ```bash
-   chmod +x mqtt_linux_monitoring.sh
-   chmod +x config.sh
+   git clone <your-repo> /tmp/linux_mqtt_ha
+   cd /tmp/linux_mqtt_ha
    ```
 
-## Configuration
+2. **Run the configuration script**:
+   ```bash
+   sudo ./config-python.sh
+   ```
 
-Edit the configuration variables in `config.sh` or directly in the script:
+3. **Follow the interactive prompts** to:
+   - Install dependencies
+   - Configure MQTT settings
+   - Test the script
+   - Set up the systemd service
 
-- `MQTT_BROKER`: Your MQTT broker IP/hostname
-- `MQTT_PORT`: MQTT broker port (default: 1883)
-- `MQTT_USER`: MQTT username (leave empty if no auth)
-- `MQTT_PASS`: MQTT password (leave empty if no auth)
-- `DEVICE_NAME`: How the device appears in Home Assistant
-- `HA_DISCOVERY_PREFIX`: Home Assistant discovery prefix (default: "homeassistant")
-- `DRY_RUN`: Set to true to only print MQTT messages without publishing (for testing)
+## Manual Installation
 
-## Testing & Debugging
+### 1. Install Dependencies
 
-### Dry Run Mode
-Use dry run mode to test the script without publishing to MQTT:
 ```bash
-./mqtt_linux_monitoring.sh --dry-run
+# System packages
+sudo apt-get update
+sudo apt-get install python3 python3-pip smartmontools lm-sensors sysstat
+
+# Python MQTT library
+pip3 install paho-mqtt
+# Or install from requirements.txt
+pip3 install -r requirements.txt
 ```
 
-This will:
-- Skip dependency checks for MQTT client
-- Print all MQTT topics and payloads to console
-- Show retained message indicators
-- Allow you to verify sensor data and Home Assistant discovery configs
+### 2. Configure MQTT Settings
 
-### Command Line Options
-- `--dry-run`: Enable dry run mode (print only, don't publish)
-- `--help`: Show usage information
+Edit the `mqtt_linux_monitoring.py` file and modify these variables in the `__init__` method:
+
+```python
+self.mqtt_broker = "your-mqtt-broker-ip"
+self.mqtt_port = 1883
+self.mqtt_user = "your-username"  # Leave empty if no auth
+self.mqtt_pass = "your-password"  # Leave empty if no auth
+```
+
+### 3. Test the Script
+
+Run in dry-run mode to test without publishing:
+```bash
+python3 mqtt_linux_monitoring.py --dry-run
+```
+
+Run normally:
+```bash
+python3 mqtt_linux_monitoring.py
+```
+
+### 4. Install as System Service
+
+```bash
+# Copy files to installation directory
+sudo mkdir -p /opt/linux_mqtt_ha
+sudo cp mqtt_linux_monitoring.py /opt/linux_mqtt_ha/
+sudo cp requirements.txt /opt/linux_mqtt_ha/
+sudo chmod +x /opt/linux_mqtt_ha/mqtt_linux_monitoring.py
+
+# Install systemd service
+sudo cp linux-monitor-python.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Enable and start service
+sudo systemctl enable linux-monitor-python
+sudo systemctl start linux-monitor-python
+```
 
 ## Usage
 
-### Run with configuration file:
+### Command Line Options
+
 ```bash
-source my-config.sh && ./mqtt_linux_monitoring.sh
+python3 mqtt_linux_monitoring.py [--dry-run] [--help]
 ```
 
-### Run with direct configuration:
-Edit the script directly and run:
+- `--dry-run`: Print MQTT topics and messages without publishing them
+- `--help`: Show help message
+
+### Service Management
+
 ```bash
-./mqtt_linux_monitoring.sh
+# Start service
+sudo systemctl start linux-monitor-python
+
+# Stop service
+sudo systemctl stop linux-monitor-python
+
+# Check status
+sudo systemctl status linux-monitor-python
+
+# View logs
+sudo journalctl -u linux-monitor-python -f
+
+# Enable/disable automatic startup
+sudo systemctl enable linux-monitor-python
+sudo systemctl disable linux-monitor-python
 ```
 
-### Dry run mode (testing):
-Test the script without actually publishing to MQTT:
-```bash
-./mqtt_linux_monitoring.sh --dry-run
+## Home Assistant Integration
+
+The script automatically creates Home Assistant discovery configurations for all sensors. Sensors will appear in Home Assistant under a device named after your hostname.
+
+### Monitored Metrics
+
+#### Real-time Sensors (10-second updates):
+- **CPU Usage** (%)
+- **CPU Temperature** (°C)
+- **System Load** (1-minute average)
+- **Memory Usage** (%)
+- **Memory Info** (used/total in human readable format)
+- **Disk Temperature** (°C) - per disk
+- **Disk Read Speed** (KB/s) - per disk
+- **Disk Write Speed** (KB/s) - per disk
+- **Disk Utilization** (%) - per disk
+
+#### Slow Update Sensors (1-hour updates):
+- **Disk SMART Health** (PASSED/FAILED) - per disk
+
+#### One-time Sensors:
+- **System Uptime** (hours)
+
+## Configuration
+
+### Monitoring Intervals
+
+You can adjust the monitoring intervals by modifying these variables in the script:
+
+```python
+self.fast_interval = 10    # CPU, memory, disk temp, disk I/O (seconds)
+self.slow_interval = 3600  # Disk SMART data (seconds)
 ```
 
-### Run as a service:
-Create a systemd service file `/etc/systemd/system/linux-monitor.service`:
-```ini
-[Unit]
-Description=Linux System Monitor MQTT Publisher
-After=network.target
+### MQTT Topics
 
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/path/to/script
-ExecStartPre=/bin/bash -c 'source /path/to/my-config.sh'
-ExecStart=/path/to/mqtt_linux_monitoring.sh
-Restart=always
-RestartSec=10
+The script uses this topic structure:
+- Discovery: `homeassistant/sensor/{device_id}_{sensor_name}/config`
+- State: `homeassistant/sensor/{device_id}_{sensor_name}/state`
 
-[Install]
-WantedBy=multi-user.target
-```
+### Device Information
 
-Then enable and start:
-```bash
-sudo systemctl enable linux-monitor.service
-sudo systemctl start linux-monitor.service
-```
-
-## MQTT Topics Structure
-
-The script publishes to topics following this pattern:
-```
-homeassistant/sensor/{device_id}_{sensor_name}/config  # Discovery config
-homeassistant/sensor/{device_id}_{sensor_name}/state   # Sensor data
-```
-
-## Home Assistant Sensors
-
-Once running, you'll see these sensors in Home Assistant:
-- `sensor.{hostname}_cpu_usage` - CPU usage percentage
-- `sensor.{hostname}_cpu_temp` - CPU temperature
-- `sensor.{hostname}_system_load` - System load average
-- `sensor.{hostname}_memory_usage` - Memory usage percentage
-- `sensor.{hostname}_memory_info` - Memory usage info (used/total)
-- `sensor.{hostname}_uptime` - System uptime in hours
-- `sensor.{hostname}_disk_temp_{disk}` - Temperature for each disk
-- `sensor.{hostname}_disk_health_{disk}` - SMART health for each disk
-- `sensor.{hostname}_disk_read_{disk}` - Read throughput for each disk
-- `sensor.{hostname}_disk_write_{disk}` - Write throughput for each disk
-- `sensor.{hostname}_disk_util_{disk}` - Utilization percentage for each disk
+The script identifies the device using the hostname:
+- **Device Name**: `socket.gethostname()`
+- **Device ID**: Hostname in lowercase with spaces replaced by underscores
+- **Client ID**: `linux_monitor_{hostname}`
 
 ## Troubleshooting
 
-1. **Missing sensors output**: Check if `lm-sensors` is configured:
-   ```bash
-   sudo sensors-detect
-   ```
+### Check Dependencies
+```bash
+# Verify commands are available
+which smartctl sensors iostat python3
 
-2. **No SMART data**: Ensure drives support SMART:
-   ```bash
-   sudo smartctl -i /dev/sda
-   ```
+# Check Python MQTT library
+python3 -c "import paho.mqtt.client; print('paho-mqtt is installed')"
+```
 
-3. **MQTT connection issues**: Test manually:
-   ```bash
-   mosquitto_pub -h your-broker -t test -m "hello"
-   ```
+### Test MQTT Connection
+```bash
+# Test MQTT broker connection (install mosquitto-clients)
+mosquitto_pub -h your-broker-ip -p 1883 -t test/topic -m "test message"
+```
 
-4. **Permission issues**: Make sure the user can read system files and run smartctl
+### View Detailed Logs
+```bash
+# Service logs
+sudo journalctl -u linux-monitor-python -f
 
-## Customization
+# Run manually with debug output
+python3 mqtt_linux_monitoring.py --dry-run
+```
 
-- Modify `FAST_INTERVAL` and `SLOW_INTERVAL` to change update frequencies
-- Add custom sensors by following the existing pattern
-- Customize Home Assistant device information in the `create_discovery_config` function
+### Common Issues
 
-## Security Notes
+1. **Permission Denied for smartctl**: The script needs to run as root to access SMART data
+2. **sensors command not found**: Install `lm-sensors` package
+3. **iostat command not found**: Install `sysstat` package
+4. **MQTT connection fails**: Check broker IP, port, and credentials
 
-- Store MQTT credentials securely
-- Consider using MQTT over TLS for production
-- Run with minimal required permissions
-- Regularly update dependencies for security patches
+## Comparison with Bash Version
+
+### Advantages of Python Version:
+- **Better Error Handling**: More robust exception handling
+- **Type Safety**: Type hints for better code maintainability
+- **Object-Oriented**: Cleaner code organization
+- **JSON Handling**: Native JSON support for HA discovery configs
+- **Library Support**: Rich ecosystem of Python libraries
+- **Cross-Platform**: Easier to extend for other platforms
+
+### Migration from Bash Version:
+- All functionality is preserved
+- Configuration variables are in the `__init__` method instead of top-level variables
+- Command-line arguments work the same way
+- MQTT topics and Home Assistant integration are identical
+
+## License
+
+This project is open source. Feel free to modify and distribute according to your needs.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.

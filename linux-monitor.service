@@ -1,20 +1,22 @@
 [Unit]
-Description=Linux System Monitor MQTT Publisher
-After=network.target mosquitto.service
+Description=Linux System Monitor with MQTT and Home Assistant Discovery (Python)
+After=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/mqtt_linux_monitoring
-Environment=MQTT_BROKER=localhost
-Environment=MQTT_PORT=1883
-Environment=MQTT_USER=
-Environment=MQTT_PASS=
-ExecStart=/home/pi/mqtt_linux_monitoring/mqtt_linux_monitoring.sh
+User=root
+Group=root
+WorkingDirectory=/opt/linux_mqtt_ha
+ExecStart=/usr/bin/python3 /opt/linux_mqtt_ha/mqtt_linux_monitoring.py
 Restart=always
-RestartSec=10
+RestartSec=30
 StandardOutput=journal
 StandardError=journal
+
+# Environment variables (optional - can be set in the script instead)
+# Environment=MQTT_BROKER=localhost
+# Environment=MQTT_PORT=1883
 
 [Install]
 WantedBy=multi-user.target
