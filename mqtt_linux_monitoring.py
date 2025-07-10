@@ -110,7 +110,8 @@ class LinuxSystemMonitor:
     
     def create_discovery_config(self, sensor_type: str, sensor_name: str, 
                               unit: str = "", device_class: str = "", 
-                              state_class: str = "", icon: str = "", value_template: str = "", json_attributes_topic: str = "", json_attributes_template: str = "") -> str:
+                              state_class: str = "", icon: str = "", value_template: str = "", 
+                              json_attributes_topic: str = "", json_attributes_template: str = "") -> str:
         """Create Home Assistant discovery configuration"""
         sensor_id = f"{self.device_id}_{sensor_name}"
         discovery_topic = f"{self.ha_discovery_prefix}/sensor/{sensor_id}/config"
@@ -160,7 +161,7 @@ class LinuxSystemMonitor:
         output = self.run_command(cmd)
         
         if not output:
-            return 0.0, {}
+            return {}, {}
         
         try:
             data = json.loads(output)
@@ -170,8 +171,6 @@ class LinuxSystemMonitor:
             
             # Extract CPU usage (100 - idle)
             cpu_data = stats.get("avg-cpu", {})
-            cpu_idle = cpu_data.get("idle", 100.0)
-            cpu_usage = 100.0 - cpu_idle
             
             # Extract disk data
             disk_data = {}
@@ -184,7 +183,7 @@ class LinuxSystemMonitor:
                         'util': disk.get("util", 0.0)
                     }
             
-            return cpu_usage, disk_data
+            return cpu_data, disk_data
             
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
             print(f"Error parsing iostat JSON output: {e}")
@@ -201,32 +200,51 @@ class LinuxSystemMonitor:
                 # Look for coretemp or similar CPU temperature sensor
                 for sensor_name, sensor_data in data.items():
                     if "coretemp" in sensor_name.lower() or "cpu" in sensor_name.lower():
+                        # Collect core temperatures
+                        core_temps = {}
+                        package_temp = None
+                        
                         # Look for Package id 0 first (main CPU temp)
                         if "Package id 0" in sensor_data:
-                            temp_input = sensor_data["Package id 0"].get("temp1_input", 0.0)
-                            return {
-                                "temperature": round(temp_input, 1),
-                                "attrs": {
-                                    "sensor": sensor_name,
-                                    "max_temp": sensor_data["Package id 0"].get("temp1_max", 0.0),
-                                    "crit_temp": sensor_data["Package id 0"].get("temp1_crit", 0.0),
-                                }
-                            }
+                            package_temp = sensor_data["Package id 0"].get("temp1_input", 0.0)
                         
-                        # Fallback to first core temperature
+                        # Collect individual core temperatures as array
+                        core_temps_array = []
+                        core_count = 0
+                        
+                        # Collect core temperatures in numerical order
+                        core_data_dict = {}
                         for core_name, core_data in sensor_data.items():
                             if "Core" in core_name and isinstance(core_data, dict):
-                                temp_key = next((k for k in core_data.keys() if k.endswith("_input")), None)
-                                if temp_key:
-                                    temp_input = core_data[temp_key]
-                                    return {
-                                        "temperature": round(temp_input, 1),
-                                        "attrs": {
-                                            "sensor": f"{sensor_name} - {core_name}",
-                                            "max_temp": core_data.get(temp_key.replace("_input", "_max"), 0.0),
-                                            "crit_temp": core_data.get(temp_key.replace("_input", "_crit"), 0.0),\
-                                        }
-                                    }
+                                # Extract core number
+                                try:
+                                    core_num = int(core_name.split()[-1])  # "Core 0" -> 0
+                                    temp_key = next((k for k in core_data.keys() if k.endswith("_input")), None)
+                                    if temp_key:
+                                        core_data_dict[core_num] = round(core_data[temp_key], 1)
+                                        core_count = max(core_count, core_num + 1)
+                                except (ValueError, IndexError):
+                                    continue
+                        
+                        # Build array in order (fill missing cores with 0.0)
+                        for i in range(core_count):
+                            core_temps_array.append(core_data_dict.get(i, 0.0))
+                        
+                        # Use package temp if available, otherwise average of cores
+                        if package_temp is not None:
+                            main_temp = package_temp
+                        elif core_temps_array:
+                            main_temp = sum(core_temps_array) / len(core_temps_array)
+                        else:
+                            main_temp = 0.0
+                        
+                        return {
+                            "temperature": round(main_temp, 1),
+                            "attrs": {
+                                "sensor": sensor_name,
+                                "cores": core_temps_array  # Array of core temperatures
+                            }
+                        }
                 
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 print(f"Error parsing sensors JSON output: {e}")
@@ -261,50 +279,65 @@ class LinuxSystemMonitor:
     #         return 0.0
     
     def get_memory_usage(self) -> Dict:
-        """Get memory usage data using free command with JSON output"""
-        # Try free command with JSON output first
-        output = self.run_command(["free", "-b", "--json"])
+        """Get memory usage data by parsing free command output"""
+        # Use free command with bytes output for precise values
+        output = self.run_command(["free", "-b"])
         if output:
             try:
-                data = json.loads(output)
+                lines = output.strip().split('\n')
                 
-                # Extract memory and swap data
-                memory_data = data.get("memory", {})
-                swap_data = data.get("swap", {})
+                # Parse memory line (second line)
+                mem_line = None
+                swap_line = None
                 
-                # Calculate usage percentage
-                mem_total = memory_data.get("total", 0)
-                mem_used = memory_data.get("used", 0)
-                mem_usage_percent = (mem_used / mem_total * 100.0) if mem_total > 0 else 0.0
+                for line in lines:
+                    if line.startswith('Mem:'):
+                        mem_line = line
+                    elif line.startswith('Swap:'):
+                        swap_line = line
                 
-                swap_total = swap_data.get("total", 0)
-                swap_used = swap_data.get("used", 0)
-                swap_usage_percent = (swap_used / swap_total * 100.0) if swap_total > 0 else 0.0
+                # Parse memory data
+                mem_data = {"total": 0, "used": 0, "free": 0, "shared": 0, "buff_cache": 0, "available": 0}
+                if mem_line:
+                    parts = mem_line.split()
+                    if len(parts) >= 7:  # Mem: total used free shared buff/cache available
+                        mem_data = {
+                            "total": int(parts[1]),
+                            "used": int(parts[2]),
+                            "free": int(parts[3]),
+                            "shared": int(parts[4]),
+                            "buff_cache": int(parts[5]),
+                            "available": int(parts[6])
+                        }
+                
+                # Parse swap data
+                swap_data = {"total": 0, "used": 0, "free": 0}
+                if swap_line:
+                    parts = swap_line.split()
+                    if len(parts) >= 4:  # Swap: total used free
+                        swap_data = {
+                            "total": int(parts[1]),
+                            "used": int(parts[2]),
+                            "free": int(parts[3])
+                        }
+                
+                # Calculate usage percentages
+                mem_usage_percent = (mem_data["used"] / mem_data["total"] * 100.0) if mem_data["total"] > 0 else 0.0
+                swap_usage_percent = (swap_data["used"] / swap_data["total"] * 100.0) if swap_data["total"] > 0 else 0.0
                 
                 return {
                     "mem_usage": round(mem_usage_percent, 1),
-                    "mem": {
-                        "total": memory_data.get("total", 0),
-                        "used": memory_data.get("used", 0),
-                        "free": memory_data.get("free", 0),
-                        "shared": memory_data.get("shared", 0),
-                        "buff_cache": memory_data.get("buff_cache", 0),
-                        "available": memory_data.get("available", 0)
-                    },
+                    "mem": mem_data,
                     "swap_usage": round(swap_usage_percent, 1),
-                    "swap": {
-                        "total": swap_data.get("total", 0),
-                        "used": swap_data.get("used", 0),
-                        "free": swap_data.get("free", 0),
-                    }
+                    "swap": swap_data
                 }
                 
-            except (json.JSONDecodeError, KeyError, TypeError, ZeroDivisionError) as e:
-                print(f"Error parsing free JSON output: {e}")
+            except (ValueError, IndexError, TypeError, ZeroDivisionError) as e:
+                print(f"Error parsing free output: {e}")
         
         # Return empty data if all methods fail
         return {
-            "meme_usage": 0.0,
+            "mem_usage": 0.0,
             "mem": {
                 "total": 0,
                 "used": 0,
@@ -354,7 +387,7 @@ class LinuxSystemMonitor:
         if disk_or_serial.startswith('/dev/'):
             disk_path = disk_or_serial
         else:
-            disk_path = self.get_disk_path_by_serial(disk_or_serial)
+            disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
             if not disk_path:
                 return 0.0
         
@@ -376,7 +409,7 @@ class LinuxSystemMonitor:
         if disk_or_serial.startswith('/dev/'):
             disk_path = disk_or_serial
         else:
-            disk_path = self.get_disk_path_by_serial(disk_or_serial)
+            disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
             if not disk_path:
                 return "UNKNOWN"
         
@@ -386,6 +419,10 @@ class LinuxSystemMonitor:
     def setup_discovery(self):
         """Setup Home Assistant discovery configurations"""
         print("Setting up Home Assistant discovery...")
+        self.topics['cpu_temp'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state"
+        self.topics['cpu_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state"
+        self.topics['memory_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state"
+
         dev_discovery = {
             "dev": {
                 "ids": self.device_id,
@@ -419,7 +456,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "CPU Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg-cpu/state",
+                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg-cpu/state",
                     "json_attributes_template": "{{ value_json | tojson }}",
                     "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
@@ -443,7 +480,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "Swap Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_swap_usage/state",
+                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_swap_usage/state",
                     "json_attributes_template": "{{ value_json.swap | tojson }}",
                     "value_template": "{{ value_json.swap_usage }}",
@@ -457,11 +494,8 @@ class LinuxSystemMonitor:
         
         
         # Disk sensors
-        self.topics['disk_temp'] = {}
-        self.topics['disk_health'] = {}
-        self.topics['disk_read'] = {}
-        self.topics['disk_write'] = {}
-        self.topics['disk_util'] = {}
+        self.topics['disk_smart'] = {}
+        self.topics['disk_load'] = {}
         
         # Get initial disk mapping
         disk_serials = self.get_disk_list_by_serial()
@@ -469,28 +503,15 @@ class LinuxSystemMonitor:
         for serial in disk_serials:
             display_name = self.get_disk_display_name(serial)
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
-            
-            self.topics['disk_temp'][serial] = self.create_discovery_config(
-                f"Disk Temperature ({display_name})", f"disk_temp_{safe_serial}", 
-                "°C", "temperature", "measurement", "mdi:harddisk")
-            self.topics['disk_health'][serial] = self.create_discovery_config(
-                f"Disk Health ({display_name})", f"disk_health_{safe_serial}", 
-                "", "", "", "mdi:harddisk")
-            self.topics['disk_read'][serial] = self.create_discovery_config(
-                f"Disk Read ({display_name})", f"disk_read_{safe_serial}", 
-                "KB/s", "", "measurement", "mdi:harddisk")
-            self.topics['disk_write'][serial] = self.create_discovery_config(
-                f"Disk Write ({display_name})", f"disk_write_{safe_serial}", 
-                "KB/s", "", "measurement", "mdi:harddisk")
-            self.topics['disk_util'][serial] = self.create_discovery_config(
-                f"Disk Utilization ({display_name})", f"disk_util_{safe_serial}", 
-                "%", "", "measurement", "mdi:harddisk")
+            #### Rewrite this part to device_discovery
+            self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
+            self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
         print("Publishing one-time sensors...")
-        uptime_hours = self.get_uptime_hours()
-        self.mqtt_publish(self.topics['uptime'], str(uptime_hours))
+        # uptime_hours = self.get_uptime_hours()
+        # self.mqtt_publish(self.topics['uptime'], str(uptime_hours))
     
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
@@ -519,22 +540,23 @@ class LinuxSystemMonitor:
         
         # CPU metrics
         cpu_temp_data = self.get_cpu_temperature()
-        self.mqtt_publish(self.topics['cpu_usage'], f"{cpu_usage:.1f}")
+        self.mqtt_publish(self.topics['cpu_usage'], json.dumps(cpu_usage))
         self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
+        # self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
         
         # System metrics
         # system_load = self.get_system_load()
         memory_data = self.get_memory_usage()
-        memory_info = self.get_memory_info()
+        # memory_info = self.get_memory_info()
         # self.mqtt_publish(self.topics['system_load'], f"{system_load:.2f}")
         self.mqtt_publish(self.topics['memory_usage'], json.dumps(memory_data))
-        self.mqtt_publish(self.topics['memory_info'], memory_info)
+        # self.mqtt_publish(self.topics['memory_info'], memory_info)
         
         # Disk metrics - update mapping first
         disk_serials = self.get_disk_list_by_serial()
         
         for serial in disk_serials:
-            disk_path = self.get_disk_path_by_serial(serial)
+            disk_path = self.disk_serial_mapping.get(serial, "")
             if not disk_path:
                 continue
                 
@@ -548,9 +570,7 @@ class LinuxSystemMonitor:
                 # Use cached disk I/O stats
                 if disk_name in self.disk_io_cache:
                     io_stats = self.disk_io_cache[disk_name]
-                    self.mqtt_publish(self.topics['disk_read'][serial], f"{io_stats['read_kbs']:.1f}")
-                    self.mqtt_publish(self.topics['disk_write'][serial], f"{io_stats['write_kbs']:.1f}")
-                    self.mqtt_publish(self.topics['disk_util'][serial], f"{io_stats['util']:.1f}")
+                    self.mqtt_publish(self.topics['disk_load'][serial], json.dumps(io_stats))
     
     def cleanup(self, signum=None, frame=None):
         """Handle script termination"""
@@ -662,10 +682,6 @@ class LinuxSystemMonitor:
         """Get list of disk serials (updated each call)"""
         self.update_disk_mapping()
         return list(self.disk_serial_mapping.keys())
-
-    def get_disk_path_by_serial(self, serial: str) -> str:
-        """Get device path for a given serial number"""
-        return self.disk_serial_mapping.get(serial, "")
 
     def get_disk_display_name(self, serial: str) -> str:
         """Get a human-readable name for a disk based on its serial"""
