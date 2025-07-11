@@ -403,18 +403,107 @@ class LinuxSystemMonitor:
                             continue
         return 0.0
 
-    def get_disk_smart_health(self, disk_or_serial: str) -> str:
-        """Get disk SMART health status (accepts device path or serial)"""
+    def get_disk_smart(self, disk_or_serial: str) -> Dict:
+        """Get disk SMART data using JSON output from smartctl (accepts device path or serial)"""
         # Determine if input is a serial or device path
         if disk_or_serial.startswith('/dev/'):
             disk_path = disk_or_serial
         else:
             disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
             if not disk_path:
-                return "UNKNOWN"
+                return {
+                    "info": {"device_name": "unknown", "smart_available": False},
+                    "smart": {}
+                }
         
-        output = self.run_command(["smartctl", "-H", disk_path])
-        return "PASSED" if "PASSED" in output else "FAILED"
+        # Use smartctl with JSON output for comprehensive SMART data
+        output = self.run_command(["smartctl", "-A", "-i", "-j", disk_path])
+        if not output:
+            return {
+                "info": {"device_name": disk_path, "smart_available": False},
+                "smart": {}
+            }
+        
+        try:
+            data = json.loads(output)
+            
+            # Extract device info
+            info = {
+                "device_name": data.get("device", {}).get("name", disk_path),
+                "firmware_version": data.get("firmware_version", "Unknown"),
+                "user_capacity": data.get("user_capacity", {}).get("bytes", 0),
+                "logical_block_size": data.get("logical_block_size", 512),
+                "rotation_rate": data.get("rotation_rate", 0),
+                "form_factor": data.get("form_factor", {}).get("name", "Unknown"),
+                "interface_speed": f"{data.get('interface_speed', {}).get('current', {}).get('string', 'Unknown')} / {data.get('interface_speed', {}).get('max', {}).get('string', 'Unknown')}",
+                "smart_available": data.get("smart_support", {}).get("available", False)
+            }
+            
+            # Extract SMART attributes
+            smart_attrs = {}
+            
+            # Add overall health status
+            if "smart_status" in data:
+                smart_attrs["health_status"] = "PASSED" if data["smart_status"].get("passed", False) else "FAILED"
+            
+            # Add temperature if available
+            if "temperature" in data:
+                smart_attrs["temperature"] = data["temperature"].get("current", 0)
+            
+            # Add power on time and cycle count if available
+            if "power_on_time" in data:
+                smart_attrs["power_on_hours"] = data["power_on_time"].get("hours", 0)
+            if "power_cycle_count" in data:
+                smart_attrs["power_cycle_count"] = data.get("power_cycle_count", 0)
+            
+            # Parse SMART attributes table
+            smart_table = data.get("ata_smart_attributes", {}).get("table", [])
+            for attr in smart_table:
+                attr_id = attr.get("id", 0)
+                attr_name = attr.get("name", f"attribute_{attr_id}")
+                attr_value = attr.get("value", 0)
+                attr_raw = attr.get("raw", {}).get("value", 0)
+                
+                # Use attribute name if known, otherwise use ID
+                if "Unknown" in attr_name:
+                    key = f"attribute_{attr_id}"
+                else:
+                    key = attr_name.lower()
+                
+                # Store both normalized value and raw value
+                smart_attrs[key] = {
+                    "value": attr_value,
+                    "raw": attr_raw,
+                    # "worst": attr.get("worst", 0),
+                    # "thresh": attr.get("thresh", 0)
+                }
+            
+            return {
+                "info": info,
+                "smart": smart_attrs
+            }
+            
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
+            # Fallback to simple health check
+            health_output = self.run_command(["smartctl", "-H", disk_path])
+            health_status = "PASSED" if "PASSED" in health_output else "FAILED"
+            
+            return {
+                "info": {
+                    "device_name": disk_path,
+                    "firmware_version": "Unknown",
+                    "user_capacity": 0,
+                    "logical_block_size": 512,
+                    "rotation_rate": 0,
+                    "form_factor": "Unknown",
+                    "interface_speed": "Unknown / Unknown",
+                    "smart_available": True
+                },
+                "smart": {
+                    "health_status": health_status
+                }
+            }
     
     def setup_discovery(self):
         """Setup Home Assistant discovery configurations"""
@@ -521,9 +610,9 @@ class LinuxSystemMonitor:
         disk_serials = self.get_disk_list_by_serial()
         
         for serial in disk_serials:
-            if serial in self.topics['disk_health']:
-                health = self.get_disk_smart_health(serial)
-                self.mqtt_publish(self.topics['disk_health'][serial], health)
+            if serial in self.topics['disk_smart']:
+                smart_data = self.get_disk_smart(serial)
+                self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
     
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
@@ -563,9 +652,9 @@ class LinuxSystemMonitor:
             disk_name = os.path.basename(disk_path)
             
             # Only publish if we have topics for this serial (created during discovery)
-            if serial in self.topics['disk_temp']:
-                disk_temp = self.get_disk_temperature(serial)
-                self.mqtt_publish(self.topics['disk_temp'][serial], f"{disk_temp:.1f}")
+            if serial in self.topics['disk_smart']:
+                # disk_temp = self.get_disk_temperature(serial)
+                # self.mqtt_publish(self.topics['disk_temp'][serial], f"{disk_temp:.1f}")
                 
                 # Use cached disk I/O stats
                 if disk_name in self.disk_io_cache:
