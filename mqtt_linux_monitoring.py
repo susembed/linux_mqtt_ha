@@ -43,10 +43,10 @@ class LinuxSystemMonitor:
         self.last_slow_update = 0
         
         # Cache variables
-        self.disk_io_cache = {}
-        self.cpu_usage_cache = 0
         self.disk_serial_mapping = {}  # Maps serial -> device path
         self.disk_info_cache = {}      # Maps serial -> disk info (name, model, size)
+        self.root_disk = None     # Root disk device name (e.g., "/dev/sda1")
+        self.root_block = None         # Root block device name
         
         # MQTT client
         self.mqtt_client = None
@@ -402,7 +402,61 @@ class LinuxSystemMonitor:
                         except ValueError:
                             continue
         return 0.0
-
+    def get_disk_usage(self, block_path: str) -> Dict:
+        """Get disk usage statistics using lsblk with JSON output (accepts device path)"""
+        # Use lsblk with JSON output
+        output = self.run_command(["lsblk", "-o", "NAME,SIZE,FSUSED,FSUSE%,FSAVAIL,FSTYPE,FSSIZE,MOUNTPOINT", "-J", "-b", block_path])
+        if output:
+            try:
+                data = json.loads(output)
+                blockdevices = data.get("blockdevices", [])
+                
+                if blockdevices and len(blockdevices) > 0:
+                    device = blockdevices[0]
+                    
+                    # Extract usage percentage (remove % sign)
+                    fsuse_percent = device.get("fsuse%", "0%")
+                    usage_percent = float(fsuse_percent.replace('%', '')) if fsuse_percent and fsuse_percent != "null" else 0.0
+                    
+                    # Get size values directly in bytes (thanks to -b flag)
+                    def safe_int(value):
+                        try:
+                            return int(value) if value and value != "null" else 0
+                        except (ValueError, TypeError):
+                            return 0
+                    
+                    fssize = safe_int(device.get("fssize", "0"))
+                    fsused = safe_int(device.get("fsused", "0"))
+                    fsavail = safe_int(device.get("fsavail", "0"))
+                    
+                    return {
+                        "usage_percent": usage_percent,
+                        "attrs": {
+                            "mount_point": device.get("mountpoint", "unmounted") or "unmounted",
+                            "total": fssize,
+                            "used": fsused,
+                            "free": fsavail,
+                            "fstype": device.get("fstype", "unknown") or "unknown",
+                            "device_name": device.get("name", "unknown"),
+                            "total_size": device.get("size", "unknown")
+                        }
+                    }
+                    
+            except (json.JSONDecodeError, ValueError, IndexError, KeyError) as e:
+                print(f"Error parsing lsblk JSON output for {block_path}: {e}")
+        
+        return {
+            "usage_percent": 0.0,
+            "attrs": {
+                "mount_point": "unmounted",
+                "total": 0,
+                "used": 0,
+                "free": 0,
+                "fstype": "unknown",
+                "device_name": "unknown",
+                "total_size": "unknown"
+            }
+        }
     def get_disk_smart(self, disk_or_serial: str) -> Dict:
         """Get disk SMART data using JSON output from smartctl (accepts device path or serial)"""
         # Determine if input is a serial or device path
@@ -585,16 +639,18 @@ class LinuxSystemMonitor:
         # Disk sensors
         self.topics['disk_smart'] = {}
         self.topics['disk_load'] = {}
+        self.topics['disk_usage'] = {}
         
         # Get initial disk mapping
         disk_serials = self.get_disk_list_by_serial()
         
         for serial in disk_serials:
-            display_name = self.get_disk_display_name(serial)
+            # display_name = self.get_disk_display_name(serial)
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
             #### Rewrite this part to device_discovery
             self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
             self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
+            self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
@@ -621,20 +677,12 @@ class LinuxSystemMonitor:
         # Get all iostat data in one call (CPU + all disks)
         cpu_usage, disk_data = self.get_iostat_data()
         
-        # Cache CPU usage
-        self.cpu_usage_cache = cpu_usage
-        
-        # Update disk I/O cache
-        self.disk_io_cache = disk_data
-        
         # CPU metrics
         cpu_temp_data = self.get_cpu_temperature()
         self.mqtt_publish(self.topics['cpu_usage'], json.dumps(cpu_usage))
         self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
-        # self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
         
         # System metrics
-        # system_load = self.get_system_load()
         memory_data = self.get_memory_usage()
         # memory_info = self.get_memory_info()
         # self.mqtt_publish(self.topics['system_load'], f"{system_load:.2f}")
@@ -651,15 +699,15 @@ class LinuxSystemMonitor:
                 
             disk_name = os.path.basename(disk_path)
             
-            # Only publish if we have topics for this serial (created during discovery)
-            if serial in self.topics['disk_smart']:
-                # disk_temp = self.get_disk_temperature(serial)
-                # self.mqtt_publish(self.topics['disk_temp'][serial], f"{disk_temp:.1f}")
-                
-                # Use cached disk I/O stats
-                if disk_name in self.disk_io_cache:
-                    io_stats = self.disk_io_cache[disk_name]
-                    self.mqtt_publish(self.topics['disk_load'][serial], json.dumps(io_stats))
+            # Use disk I/O stats directly from iostat data
+            if disk_name in disk_data:
+                self.mqtt_publish(self.topics['disk_load'][serial], json.dumps(disk_data[disk_name]))
+            if disk_path == self.root_disk:
+                # For root disk, also publish disk usage
+                self.mqtt_publish(self.topics['disk_usage'][serial], json.dumps(self.get_disk_usage(self.root_block)))
+                # For normal disks, only fetch data of the first partition
+            else:
+                self.mqtt_publish(self.topics['disk_usage'][serial], json.dumps(self.get_disk_usage(f"{disk_path}1")))
     
     def cleanup(self, signum=None, frame=None):
         """Handle script termination"""
@@ -676,6 +724,11 @@ class LinuxSystemMonitor:
         print(f"Starting Linux System Monitor for {self.device_name}")
         print(f"MQTT Broker: {self.mqtt_broker}:{self.mqtt_port}")
         
+        # Get OS's root partition block device
+        self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
+        self.root_disk = re.sub(r'\d+$', '', self.root_block)  # Remove partition number
+        print(f"Root disk: {self.root_disk}")
+
         if self.dry_run:
             print("DRY RUN MODE: Will only print MQTT messages, not publish them")
         
@@ -760,7 +813,7 @@ class LinuxSystemMonitor:
             
             self.disk_serial_mapping = new_mapping
             self.disk_info_cache = new_info_cache
-            
+            print(f"Updated disk mapping: {len(self.disk_serial_mapping)} disks found")
             return self.disk_serial_mapping
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -772,19 +825,19 @@ class LinuxSystemMonitor:
         self.update_disk_mapping()
         return list(self.disk_serial_mapping.keys())
 
-    def get_disk_display_name(self, serial: str) -> str:
-        """Get a human-readable name for a disk based on its serial"""
-        info = self.disk_info_cache.get(serial, {})
-        name = info.get("name", serial[:8])
-        model = info.get("model", "Unknown")
-        size = info.get("size", "")
+    # def get_disk_display_name(self, serial: str) -> str:
+    #     """Get a human-readable name for a disk based on its serial"""
+    #     info = self.disk_info_cache.get(serial, {})
+    #     name = info.get("name", serial[:8])
+    #     model = info.get("model", "Unknown")
+    #     size = info.get("size", "")
         
-        if model != "Unknown" and size:
-            return f"{name} ({model} {size})"
-        elif model != "Unknown":
-            return f"{name} ({model})"
-        else:
-            return f"{name} (S/N: {serial[:8]})"
+    #     if model != "Unknown" and size:
+    #         return f"{name} ({model} {size})"
+    #     elif model != "Unknown":
+    #         return f"{name} ({model})"
+    #     else:
+    #         return f"{name} (S/N: {serial[:8]})"
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Linux System Monitor with MQTT and Home Assistant Discovery")
