@@ -1,0 +1,12 @@
+{
+    "temperature": 40.0,
+    "attrs": {
+        "sensor": "coretemp-isa-0000",
+        "cores": [
+            39.0,
+            35.0,
+            38.0,
+            36.0
+        ]
+    }
+}
