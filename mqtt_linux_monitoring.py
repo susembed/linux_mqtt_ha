@@ -26,6 +26,8 @@ class LinuxSystemMonitor:
         self.mqtt_port = 1883
         self.mqtt_user = ""
         self.mqtt_pass = ""
+        self.ifs_name = ["enp6s0" ] # Network interface to monitor (if needed)
+
         self.mqtt_client_id = f"linux_monitor_{socket.gethostname()}"
         self.device_name = socket.gethostname()
         self.device_id = socket.gethostname().lower().replace(" ", "_")
@@ -47,6 +49,7 @@ class LinuxSystemMonitor:
         self.disk_info_cache = {}      # Maps serial -> disk info (name, model, size)
         self.root_disk = None     # Root disk device name (e.g., "/dev/sda1")
         self.root_block = None         # Root block device name
+        self.if_statistics = {}
         
         # MQTT client
         self.mqtt_client = None
@@ -722,7 +725,18 @@ class LinuxSystemMonitor:
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
-        
+        for ifname  in self.ifs_name:
+            try:
+                if ifname not in self.if_statistics:
+                    self.if_statistics[ifname] = {"rx_bytes": 0, "tx_bytes": 0}
+                # Get network interface statistics
+                with open(f'/sys/class/net/{ifname}/statistics/rx_bytes', 'r') as f:
+                    self.if_statistics[ifname]["rx_bytes"] = int(f.read().strip())
+                with open(f'/sys/class/net/{ifname}/statistics/tx_bytes', 'r') as f:
+                    self.if_statistics[ifname]["tx_bytes"] = int(f.read().strip())
+            except FileNotFoundError:
+                print(f"Network interface {ifname} not found, skipping.")
+                continue
         # Get all iostat data in one call (CPU + all disks)
         cpu_usage, disk_data = self.get_iostat_data()
         
