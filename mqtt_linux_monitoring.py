@@ -26,7 +26,7 @@ class LinuxSystemMonitor:
         self.mqtt_port = 1883
         self.mqtt_user = ""
         self.mqtt_pass = ""
-        self.ifs_name = ["enp6s0" ] # Network interface to monitor (if needed)
+        self.ifs_name = ["lan" ] # Network interface to monitor (if needed)
 
         self.mqtt_client_id = f"linux_monitor_{socket.gethostname()}"
         self.device_name = socket.gethostname()
@@ -110,45 +110,6 @@ class LinuxSystemMonitor:
         
         if self.mqtt_client:
             self.mqtt_client.publish(topic, payload, retain=retain)
-    
-    def create_discovery_config(self, sensor_type: str, sensor_name: str, 
-                              unit: str = "", device_class: str = "", 
-                              state_class: str = "", icon: str = "", value_template: str = "", 
-                              json_attributes_topic: str = "", json_attributes_template: str = "") -> str:
-        """Create Home Assistant discovery configuration"""
-        sensor_id = f"{self.device_id}_{sensor_name}"
-        discovery_topic = f"{self.ha_discovery_prefix}/sensor/{sensor_id}/config"
-        state_topic = f"{self.ha_discovery_prefix}/sensor/{sensor_id}/state"
-        
-        config = {
-            "name": f"{self.device_name} {sensor_type}",
-            "unique_id": sensor_id,
-            "state_topic": state_topic,
-            "device": {
-                "identifiers": [self.device_id],
-                "name": self.device_name,
-                "model": "Linux System Monitor",
-                "manufacturer": "Custom Script"
-            }
-        }
-        
-        if unit:
-            config["unit_of_measurement"] = unit
-        if device_class:
-            config["device_class"] = device_class
-        if state_class:
-            config["state_class"] = state_class
-        if icon:
-            config["icon"] = icon
-        if value_template:
-            config["value_template"] = value_template
-        if json_attributes_topic:
-            config["json_attributes_topic"] = json_attributes_topic
-        if json_attributes_template:
-            config["json_attributes_template"] = json_attributes_template
-        
-        self.mqtt_publish(discovery_topic, json.dumps(config), True)
-        return state_topic
     
     def run_command(self, cmd: List[str], timeout: int = 30) -> str:
         """Run system command and return output"""
@@ -687,7 +648,149 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
                 "state_class": "measurement"
             }
+            dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
+                "p": "sensor",
+                "name": f"Disk Info {serial[:8]}",
+                "state_topic": self.topics['disk_info'][serial],
+                "json_attributes_topic": self.topics['disk_info'][serial],
+                "json_attributes_template": "{{ value_json.info | tojson }}",
+                "value_template": "{{ value_json.info.device_name }}",
+                "device_class": "diagnostic",
+                "icon": "mdi:harddisk",
+                "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
+                }
+            if self.disk_serial_mapping.get(serial) == self.root_disk:
+                dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"root disk write speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.read_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_read_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"root disk read speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.write_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_util_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"root disk utilization",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.util | float(0) }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_usage_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"root disk usage",
+                    "state_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                    "value_template": "{{ value_json.usage_percent }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
+                    "state_class": "measurement"
+                }
+            else:
+                dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"Disk {serial[:8]} write speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.write_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_read_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"Disk {serial[:8]} read speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.read_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_util_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"Disk {serial[:8]} utilization",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.util | float(0) }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_usage_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"Disk {serial[:8]} usage",
+                    "state_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                    "value_template": "{{ value_json.usage_percent }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
+                    "state_class": "measurement"
+                }
 
+        self.topics['net_stats'] = {}
+        for if_name in self.ifs_name:
+            safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
+            self.topics['net_stats'][if_name] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_net_stats_{safe_ifname}/state"
+            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
+                "p": "sensor",
+                "name": f"{self.device_id} {if_name} Rx speed",
+                "state_topic": self.topics['net_stats'][if_name],
+                "value_template": "{{ value_json.rx_speed | int(0)}}", 
+                "unit_of_measurement": "B/s",
+                "icon": "mdi:download",
+                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
+                "state_class": "measurement"
+                }
+            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
+                "p": "sensor",
+                "name": f"{self.device_id} {if_name} Tx speed",
+                "state_topic": self.topics['net_stats'][if_name],
+                "value_template": "{{ value_json.tx_speed | int(0)}}", 
+                "unit_of_measurement": "B/s",
+                "icon": "mdi:upload",
+                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
+                "state_class": "measurement"
+            }
+            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
+                "p": "sensor",
+                "name": f"{self.device_id} {if_name} Link Speed",
+                "state_topic": self.topics['net_stats'][if_name],
+                "value_template": "{{ value_json.link_speed | int(0)}}", 
+                "unit_of_measurement": "Mb/s",
+                "icon": "mdi:speedometer",
+                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_link_speed",
+                "state_class": "measurement"
+            }
+            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
+                "p": "sensor",
+                "name": f"{self.device_id} {if_name} Duplex",
+                "state_topic": self.topics['net_stats'][if_name],
+                "value_template": "{{ value_json.duplex }}",
+                "icon": "mdi:network",
+                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
+                "state_class": "measurement"
+            }
+
+        self.mqtt_publish(f"{self.ha_discovery_prefix}/sensor/{self.device_id}/discovery", json.dumps(dev_discovery), True)
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
@@ -721,10 +824,49 @@ class LinuxSystemMonitor:
                 
                 disk_info = self.get_disk_info(disk_path)
                 self.mqtt_publish(self.topics['disk_info'][serial], json.dumps(disk_info))
-
+    def publish_network_sensors(self):
+        """Publish network interface sensors"""
+        # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting network interface data...")
+        
+        for ifname in self.ifs_name:
+            if ifname not in self.if_statistics:
+                self.if_statistics[ifname] = {"rx_bytes": 0, "tx_bytes": 0}
+            try:
+                # Get network interface statistics
+                with open(f'/sys/class/net/{ifname}/statistics/rx_bytes', 'r') as f:
+                    rx_delta = int(f.read().strip()) - self.if_statistics[ifname]["rx_bytes"]
+                    if rx_delta < 0:
+                        rx_speed = 0
+                    else:
+                        rx_speed = int(rx_delta / self.fast_interval)
+                with open(f'/sys/class/net/{ifname}/statistics/tx_bytes', 'r') as f:
+                    tx_delta = int(f.read().strip()) - self.if_statistics[ifname]["tx_bytes"]
+                    if tx_delta < 0:
+                        tx_speed = 0
+                    else:
+                        tx_speed = int(tx_delta / self.fast_interval)
+                with open(f'/sys/class/net/{ifname}/speed', 'r') as f:
+                    link_speed = int(f.read().strip()) 
+                with open(f'/sys/class/net/{ifname}/duplex', 'r') as f:
+                    duplex = f.read().strip()
+                # Publish the statistics
+                topic = f"network/{ifname}/stats"
+                payload = json.dumps({
+                    "rx_speed": rx_speed,  # Bytes per second
+                    "tx_speed": tx_speed,  # Bytes per second
+                    "link_speed": link_speed,
+                    "duplex": duplex,
+                })
+                self.mqtt_publish(topic, payload)
+                
+            except FileNotFoundError:
+                print(f"Network interface {ifname} not found, skipping.")
+                continue
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
+        
+        # Prepare network interface sensors before collecting iostat data
         for ifname  in self.ifs_name:
             try:
                 if ifname not in self.if_statistics:
@@ -739,6 +881,8 @@ class LinuxSystemMonitor:
                 continue
         # Get all iostat data in one call (CPU + all disks)
         cpu_usage, disk_data = self.get_iostat_data()
+
+        self.publish_network_sensors()
         
         # CPU metrics
         cpu_temp_data = self.get_cpu_temperature()
