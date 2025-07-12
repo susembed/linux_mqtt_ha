@@ -465,18 +465,12 @@ class LinuxSystemMonitor:
         else:
             disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
             if not disk_path:
-                return {
-                    "info": {"device_name": "unknown", "smart_available": False},
-                    "smart": {}
-                }
+                return {}
         
         # Use smartctl with JSON output for comprehensive SMART data
-        output = self.run_command(["smartctl", "-A", "-i", "-j", disk_path])
+        output = self.run_command(["smartctl", "-A", "-j", disk_path])
         if not output:
-            return {
-                "info": {"device_name": disk_path, "smart_available": False},
-                "smart": {}
-            }
+            return {}
         
         try:
             data = json.loads(output)
@@ -484,6 +478,9 @@ class LinuxSystemMonitor:
             # Extract device info
             info = {
                 "device_name": data.get("device", {}).get("name", disk_path),
+                "model_family": data.get("model_family", "Unknown"),
+                "model_name": data.get("model_name", "Unknown"),
+                "serial_number": data.get("serial_number", "Unknown"),
                 "firmware_version": data.get("firmware_version", "Unknown"),
                 "user_capacity": data.get("user_capacity", {}).get("bytes", 0),
                 "logical_block_size": data.get("logical_block_size", 512),
@@ -515,8 +512,7 @@ class LinuxSystemMonitor:
             for attr in smart_table:
                 attr_id = attr.get("id", 0)
                 attr_name = attr.get("name", f"attribute_{attr_id}")
-                attr_value = attr.get("value", 0)
-                attr_raw = attr.get("raw", {}).get("value", 0)
+                attr_value = attr.get("raw", {}).get("string", 0)
                 
                 # Use attribute name if known, otherwise use ID
                 if "Unknown" in attr_name:
@@ -525,17 +521,9 @@ class LinuxSystemMonitor:
                     key = attr_name.lower()
                 
                 # Store both normalized value and raw value
-                smart_attrs[key] = {
-                    "value": attr_value,
-                    "raw": attr_raw,
-                    # "worst": attr.get("worst", 0),
-                    # "thresh": attr.get("thresh", 0)
-                }
+                smart_attrs[key] = attr_value
             
-            return {
-                "info": info,
-                "smart": smart_attrs
-            }
+            return smart_attrs
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
@@ -544,21 +532,51 @@ class LinuxSystemMonitor:
             health_status = "PASSED" if "PASSED" in health_output else "FAILED"
             
             return {
-                "info": {
-                    "device_name": disk_path,
-                    "firmware_version": "Unknown",
-                    "user_capacity": 0,
-                    "logical_block_size": 512,
-                    "rotation_rate": 0,
-                    "form_factor": "Unknown",
-                    "interface_speed": "Unknown / Unknown",
-                    "smart_available": True
-                },
-                "smart": {
-                    "health_status": health_status
-                }
+                "health_status": health_status
             }
-    
+
+    def get_disk_info(self, device_path: str) -> Dict:
+        """Get disk info data using JSON output from smartctl (accepts device path)"""
+
+        # Use smartctl with JSON output for comprehensive SMART data
+        output = self.run_command(["smartctl", "-i", "-j", device_path])
+        if not output:
+            return {}
+        
+        try:
+            data = json.loads(output)
+            
+            # Extract device info
+            info = {
+                "device_name": data.get("device", {}).get("name", device_path),
+                "model_family": data.get("model_family", "Unknown"),
+                "model_name": data.get("model_name", "Unknown"),
+                "serial_number": data.get("serial_number", "Unknown"),
+                "firmware_version": data.get("firmware_version", "Unknown"),
+                "user_capacity": data.get("user_capacity", {}).get("bytes", 0),
+                "logical_block_size": data.get("logical_block_size", 512),
+                "rotation_rate": data.get("rotation_rate", 0),
+                "form_factor": data.get("form_factor", {}).get("name", "Unknown"),
+                "interface_speed": f"{data.get('interface_speed', {}).get('current', {}).get('string', 'Unknown')} / {data.get('interface_speed', {}).get('max', {}).get('string', 'Unknown')}",
+                "smart_available": data.get("smart_support", {}).get("available", False)
+            }
+            
+            return info
+            
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            print(f"Error parsing smartctl JSON output for {device_path}: {e}")
+            
+            return {
+                "device_name": device_path,
+                "firmware_version": "Unknown",
+                "user_capacity": 0,
+                "logical_block_size": 512,
+                "rotation_rate": 0,
+                "form_factor": "Unknown",
+                "interface_speed": "Unknown / Unknown",
+                "smart_available": True
+            }
+
     def setup_discovery(self):
         """Setup Home Assistant discovery configurations"""
         print("Setting up Home Assistant discovery...")
@@ -638,6 +656,7 @@ class LinuxSystemMonitor:
         
         # Disk sensors
         self.topics['disk_smart'] = {}
+        self.topics['disk_info'] = {}
         self.topics['disk_load'] = {}
         self.topics['disk_usage'] = {}
         
@@ -649,8 +668,23 @@ class LinuxSystemMonitor:
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
             #### Rewrite this part to device_discovery
             self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
+            self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
             self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
             self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
+
+            dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
+                "p": "sensor",
+                "name": f"Disk SMART {serial[:8]}",
+                "state_topic": self.topics['disk_smart'][serial],
+                "json_attributes_topic": self.topics['disk_smart'][serial],
+                "json_attributes_template": "{{ value_json.smart | tojson }}",
+                "value_template": "{{ value_json.info.device_name }}",
+                "device_class": "diagnostic",
+                "icon": "mdi:harddisk",
+                "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
+                "state_class": "measurement"
+            }
+
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
@@ -669,7 +703,22 @@ class LinuxSystemMonitor:
             if serial in self.topics['disk_smart']:
                 smart_data = self.get_disk_smart(serial)
                 self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
-    
+    def publish_disk_info_and_status(self):
+        """Publish disk info and status sensors"""
+        print("Publishing disk info and status sensors...")
+        
+        # Update disk mapping and get current serials
+        disk_serials = self.get_disk_list_by_serial()
+        
+        for serial in disk_serials:
+            if serial in self.topics['disk_info']:
+                disk_path = self.disk_serial_mapping.get(serial, "")
+                if not disk_path:
+                    continue
+                
+                disk_info = self.get_disk_info(disk_path)
+                self.mqtt_publish(self.topics['disk_info'][serial], json.dumps(disk_info))
+
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
@@ -683,11 +732,7 @@ class LinuxSystemMonitor:
         self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
         
         # System metrics
-        memory_data = self.get_memory_usage()
-        # memory_info = self.get_memory_info()
-        # self.mqtt_publish(self.topics['system_load'], f"{system_load:.2f}")
-        self.mqtt_publish(self.topics['memory_usage'], json.dumps(memory_data))
-        # self.mqtt_publish(self.topics['memory_info'], memory_info)
+        self.mqtt_publish(self.topics['memory_usage'], json.dumps( self.get_memory_usage()))
         
         # Disk metrics - update mapping first
         disk_serials = self.get_disk_list_by_serial()
@@ -728,6 +773,8 @@ class LinuxSystemMonitor:
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
         self.root_disk = re.sub(r'\d+$', '', self.root_block)  # Remove partition number
         print(f"Root disk: {self.root_disk}")
+        # Update disk mapping, this also update discovery
+        self.update_disk_mapping()
 
         if self.dry_run:
             print("DRY RUN MODE: Will only print MQTT messages, not publish them")
@@ -744,7 +791,7 @@ class LinuxSystemMonitor:
         self.setup_mqtt()
         
         # Setup Home Assistant discovery
-        self.setup_discovery()
+        # self.setup_discovery()
         
         # Publish one-time sensors
         self.publish_onetime_sensors()
@@ -814,6 +861,12 @@ class LinuxSystemMonitor:
             self.disk_serial_mapping = new_mapping
             self.disk_info_cache = new_info_cache
             print(f"Updated disk mapping: {len(self.disk_serial_mapping)} disks found")
+
+            self.setup_discovery()  # Update discovery configuration
+            self.publish_disk_info_and_status()
+            print("Updated disk entities discovery and disk info and status values")
+            for serial, path in self.disk_serial_mapping.items():
+                print(f"  {serial}: {path} ({self.disk_info_cache.get(serial, {}).get('model', 'Unknown')})")
             return self.disk_serial_mapping
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -822,7 +875,6 @@ class LinuxSystemMonitor:
 
     def get_disk_list_by_serial(self) -> List[str]:
         """Get list of disk serials (updated each call)"""
-        self.update_disk_mapping()
         return list(self.disk_serial_mapping.keys())
 
     # def get_disk_display_name(self, serial: str) -> str:
