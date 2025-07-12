@@ -1,0 +1,13 @@
+{
+    "device_name": "/dev/sda",
+    "model_family": "Seagate Momentus Thin",
+    "model_name": "ST320LT007-9ZV142",
+    "serial_number": "W0Q95TAW",
+    "firmware_version": "0007DEM1",
+    "user_capacity": 320072933376,
+    "logical_block_size": 512,
+    "rotation_rate": 7200,
+    "form_factor": "Unknown",
+    "interface_speed": "Unknown / 3.0 Gb/s",
+    "smart_available": true
+}

@@ -1,0 +1,12 @@
+{
+    "usage_percent": 42.0,
+    "attrs": {
+        "mount_point": "/",
+        "total": 123878612992,
+        "used": 52155392000,
+        "free": 65383211008,
+        "fstype": "ext4",
+        "device_name": "sdc2",
+        "total_size": 126464724480
+    }
+}
