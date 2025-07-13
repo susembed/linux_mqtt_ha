@@ -22,6 +22,11 @@ check_root() {
 
 # Function to install Python dependencies
 install_dependencies() {
+    read -p "This script will install system dependencies. Do you want to continue? (Y/n): " install_deps
+    if [[ $install_deps =~ ^[Nn]$ ]]; then
+        echo "Skipping dependency installation"
+        return
+    fi
     echo "Installing system dependencies..."
     
     # Update package list
