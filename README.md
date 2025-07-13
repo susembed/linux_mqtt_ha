@@ -302,8 +302,7 @@ This project is open source. Feel free to modify and distribute according to you
 Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ### TODO Features
+- Using native paho-mqtt python instead `mosquitto_pub` command
 - Docker container monitoring
-- GPU monitoring support
-- Process monitoring
 - Custom sensor configurations
-- Web dashboard interface
+- GPU monitoring support (this can be tricky)
