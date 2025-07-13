@@ -103,12 +103,48 @@ class LinuxSystemMonitor:
             
         self.mqtt_client = mqtt.Client(self.mqtt_client_id)
         
+        # Add connection callbacks for debugging
+        def on_connect(client, userdata, flags, rc):
+            if rc == 0:
+                print("Connected to MQTT broker successfully")
+                # Set a flag to indicate connection is ready
+                self.mqtt_connected = True
+            else:
+                print(f"Failed to connect to MQTT broker: {rc}")
+                self.mqtt_connected = False
+    
+        def on_publish(client, userdata, mid):
+            print(f"Message {mid} published successfully")
+    
+        def on_disconnect(client, userdata, rc):
+            print(f"Disconnected from MQTT broker: {rc}")
+            self.mqtt_connected = False
+    
+        self.mqtt_client.on_connect = on_connect
+        self.mqtt_client.on_publish = on_publish
+        self.mqtt_client.on_disconnect = on_disconnect
+        
         if self.mqtt_user:
             self.mqtt_client.username_pw_set(self.mqtt_user, self.mqtt_pass)
+        
+        # Initialize connection flag
+        self.mqtt_connected = False
         
         try:
             self.mqtt_client.connect(self.mqtt_broker, self.mqtt_port, 60)
             self.mqtt_client.loop_start()
+            
+            # Wait for connection to establish with timeout
+            max_wait = 10  # seconds
+            wait_time = 0
+            while not self.mqtt_connected and wait_time < max_wait:
+                time.sleep(0.5)
+                wait_time += 0.5
+            
+            if not self.mqtt_connected:
+                print(f"Failed to connect to MQTT broker within {max_wait} seconds")
+                sys.exit(1)
+            
         except Exception as e:
             print(f"Failed to connect to MQTT broker: {e}")
             sys.exit(1)
@@ -121,9 +157,28 @@ class LinuxSystemMonitor:
             print(f"[DRY RUN]{retain_flag} Payload: {payload}")
             print("---")
             return
-        
-        if self.mqtt_client:
-            self.mqtt_client.publish(topic, payload, retain=retain)
+        cmd = [
+            "mosquitto_pub",
+            "-h", str(self.mqtt_broker),
+            "-p", str(self.mqtt_port),
+            "-u", str(self.mqtt_user),
+            "-P", str(self.mqtt_pass),
+            "-t", str(topic),
+            "-m", str(payload)
+        ]
+        if retain:
+            cmd.append("-r")
+        print(self.run_command(cmd))
+        print(f"Running command: {' '.join(cmd)}")
+        # if self.mqtt_client and getattr(self, 'mqtt_connected', False):
+        #     # Add debugging output
+        #     print(f"Publishing to topic: {topic}")
+        #     print(f"Payload: {payload[:100]}...")  # Truncate long payloads
+        #     result = self.mqtt_client.publish(topic, payload, retain=retain)
+        #     if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        #         print(f"Failed to publish to {topic}: {result.rc}")
+        # else:
+        #     print("MQTT client not connected!")
     
     def run_command(self, cmd: List[str], timeout: int = 30) -> str:
         """Run system command and return output"""
@@ -569,9 +624,7 @@ class LinuxSystemMonitor:
                 "sw_version": f"{self.run_command(['uname', '-v'])}",
             },
             "o": {
-                "manufacturer": "Linux",
-                "model": "Linux System Monitor",
-                "name": self.device_name,
+                "name": "Linux System Monitor",
             },
             "cmps": {
                 f"{self.device_id}_last_boot": {
@@ -662,7 +715,7 @@ class LinuxSystemMonitor:
                 "json_attributes_topic": self.topics['disk_smart'][serial],
                 "json_attributes_template": "{{ value_json.smart | tojson }}",
                 "value_template": "{{ value_json.info.device_name }}",
-                "device_class": "diagnostic",
+                # "device_class": "diagnostic",
                 "icon": "mdi:harddisk",
                 "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
                 "state_class": "measurement"
@@ -674,7 +727,7 @@ class LinuxSystemMonitor:
                 "json_attributes_topic": self.topics['disk_info'][serial],
                 "json_attributes_template": "{{ value_json.info | tojson }}",
                 "value_template": "{{ value_json.info.device_name }}",
-                "device_class": "diagnostic",
+                # "device_class": "diagnostic",
                 "icon": "mdi:harddisk",
                 "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
                 }
@@ -868,18 +921,22 @@ class LinuxSystemMonitor:
                     link_speed = int(f.read().strip()) 
                 with open(f'/sys/class/net/{ifname}/duplex', 'r') as f:
                     duplex = f.read().strip()
-                # Publish the statistics
-                topic = f"network/{ifname}/stats"
+                
+                # Use the correct topic from discovery configuration
                 payload = json.dumps({
                     "rx_speed": rx_speed,  # Bytes per second
                     "tx_speed": tx_speed,  # Bytes per second
                     "link_speed": link_speed,
                     "duplex": duplex,
                 })
-                self.mqtt_publish(topic, payload)
+                # Use the correct topic instead of hardcoded one
+                self.mqtt_publish(self.topics['net_stats'][ifname], payload)
                 
             except FileNotFoundError:
                 print(f"Network interface {ifname} not found, skipping.")
+                continue
+            except Exception as e:
+                print(f"Error reading network stats for {ifname}: {e}")
                 continue
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
