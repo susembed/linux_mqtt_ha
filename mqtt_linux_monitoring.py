@@ -713,6 +713,17 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
                 # "state_class": "measurement"
             }
+            dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
+                "p": "sensor",
+                "name": f"Disk {serial[:8]} Temperature",
+                "state_topic": self.topics['disk_smart'][serial],
+                "value_template": "{{ value_json.temperature }}",
+                "unit_of_measurement": "°C",
+                "device_class": "temperature",
+                "icon": "mdi:thermometer",
+                "unique_id": f"{self.device_id}_disk_temp_{safe_serial}",
+                "state_class": "measurement"
+            }
             dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
                 "p": "sensor",
                 "name": f"Disk {serial[:8]} Info",
