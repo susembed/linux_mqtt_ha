@@ -8,7 +8,6 @@ Publishes to MQTT broker with Home Assistant autodiscovery
 
 import json
 import time
-import socket
 import subprocess
 import argparse
 import signal
@@ -18,25 +17,40 @@ import re
 from typing import Dict, List, Tuple, Optional
 import paho.mqtt.client as mqtt
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("Warning: python-dotenv not installed. Install with: pip install python-dotenv")
+    print("Falling back to system environment variables only.")
+
 
 class LinuxSystemMonitor:
     def __init__(self):
-        # Configuration - Edit these variables for your setup
-        self.mqtt_broker = "localhost"
-        self.mqtt_port = 1883
-        self.mqtt_user = ""
-        self.mqtt_pass = ""
-        self.ifs_name = ["lan" ] # Network interface to monitor (if needed)
+        # Configuration - Load from environment variables with fallbacks
+        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
+        self.mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
+        self.mqtt_user = os.getenv("MQTT_USER", "")
+        self.mqtt_pass = os.getenv("MQTT_PASS", "")
+        
+        # Parse network interfaces from comma-separated string
+        interfaces_str = os.getenv("NETWORK_INTERFACES", "lan")
+        self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
 
-        self.mqtt_client_id = f"linux_monitor_{socket.gethostname()}"
-        self.device_name = socket.gethostname()
-        self.device_id = socket.gethostname().lower().replace(" ", "_")
-        self.ha_discovery_prefix = "homeassistant"
         
-        # Intervals (in seconds)
-        self.fast_interval = 10    # CPU, memory, disk temp, disk I/O
-        self.slow_interval = 3600  # Disk SMART data (1 hour)
+        # Intervals (in seconds) - Load from environment variables
+        self.fast_interval = int(os.getenv("FAST_INTERVAL", "10"))
+        self.slow_interval = int(os.getenv("SLOW_INTERVAL", "3600"))
         
+        # Home Assistant discovery prefix
+        self.ha_discovery_prefix = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
+        
+        with open('/etc/hostname', 'r') as f:
+            self.hostname = f.read().strip()
+        self.mqtt_client_id = f"linux_monitor_{self.hostname}"
+        self.device_name = self.hostname
+        self.device_id = self.hostname.lower().replace(" ", "_")
         # Dry run mode
         self.dry_run = False
         
@@ -554,6 +568,11 @@ class LinuxSystemMonitor:
                 "name": self.device_name,
                 "sw_version": f"{self.run_command(['uname', '-v'])}",
             },
+            "o": {
+                "manufacturer": "Linux",
+                "model": "Linux System Monitor",
+                "name": self.device_name,
+            },
             "cmps": {
                 f"{self.device_id}_last_boot": {
                     "p": "sensor",
@@ -790,7 +809,7 @@ class LinuxSystemMonitor:
                 "state_class": "measurement"
             }
 
-        self.mqtt_publish(f"{self.ha_discovery_prefix}/sensor/{self.device_id}/discovery", json.dumps(dev_discovery), True)
+        self.mqtt_publish(f"{self.ha_discovery_prefix}/device/{self.device_id}/config", json.dumps(dev_discovery), True)
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
