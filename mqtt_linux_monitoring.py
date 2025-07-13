@@ -156,12 +156,6 @@ class LinuxSystemMonitor:
     
     def mqtt_publish(self, topic: str, payload: str, retain: bool = False):
         """Publish MQTT message"""
-        if self.dry_run:
-            retain_flag = " [RETAINED]" if retain else ""
-            print(f"[DRY RUN]{retain_flag} Topic: {topic}")
-            print(f"[DRY RUN]{retain_flag} Payload: {payload}")
-            print("---")
-            return
         cmd = [
             "mosquitto_pub",
             "-h", str(self.mqtt_broker),
@@ -169,12 +163,18 @@ class LinuxSystemMonitor:
             "-u", str(self.mqtt_user),
             "-P", str(self.mqtt_pass),
             "-t", str(topic),
-            "-m", str(payload)
+            "-m", f"'{str(payload)}'"
         ]
+        print(f"Running command: {' '.join(cmd)}")
         if retain:
             cmd.append("-r")
+        if self.dry_run:
+            retain_flag = " [RETAINED]" if retain else ""
+            print(f"[DRY RUN]{retain_flag} Topic: {topic}")
+            print(f"[DRY RUN]{retain_flag} Payload: {payload}")
+            print("---")
+            return
         self.run_command(cmd)
-        # print(f"Running command: {' '.join(cmd)}")
         # if self.mqtt_client and getattr(self, 'mqtt_connected', False):
         #     # Add debugging output
         #     print(f"Publishing to topic: {topic}")
