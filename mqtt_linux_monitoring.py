@@ -163,9 +163,9 @@ class LinuxSystemMonitor:
             "-u", str(self.mqtt_user),
             "-P", str(self.mqtt_pass),
             "-t", str(topic),
-            "-m", f"'{str(payload)}'"
+            "-m", str(payload)
         ]
-        print(f"Running command: {' '.join(cmd)}")
+        # print(f"Running command: {' '.join(cmd)}")
         if retain:
             cmd.append("-r")
         if self.dry_run:
