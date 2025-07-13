@@ -821,7 +821,7 @@ class LinuxSystemMonitor:
             self.topics['net_stats'][if_name] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_net_stats_{safe_ifname}/state"
             dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
                 "p": "sensor",
-                "name": f"{self.device_id} {if_name} Rx speed",
+                "name": f"{if_name} Rx speed",
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.rx_speed | int(0)}}", 
                 "unit_of_measurement": "B/s",
@@ -832,7 +832,7 @@ class LinuxSystemMonitor:
                 }
             dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
                 "p": "sensor",
-                "name": f"{self.device_id} {if_name} Tx speed",
+                "name": f"{if_name} Tx speed",
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.tx_speed | int(0)}}", 
                 "unit_of_measurement": "B/s",
@@ -843,7 +843,7 @@ class LinuxSystemMonitor:
             }
             dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
                 "p": "sensor",
-                "name": f"{self.device_id} {if_name} Link Speed",
+                "name": f"{if_name} Link Speed",
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.link_speed | int(0)}}", 
                 "unit_of_measurement": "Mbit/s",
@@ -855,7 +855,7 @@ class LinuxSystemMonitor:
             }
             dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
                 "p": "sensor",
-                "name": f"{self.device_id} {if_name} Duplex",
+                "name": f"{if_name} Duplex",
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.duplex }}",
                 "icon": "mdi:network",
