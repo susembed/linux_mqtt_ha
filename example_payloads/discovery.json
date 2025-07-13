@@ -1,235 +1,235 @@
 {
     "dev": {
-        "ids": "hiyori",
-        "name": "hiyori",
+        "ids": "debian",
+        "name": "debian",
         "sw_version": "#1 SMP PREEMPT_DYNAMIC Debian 6.1.140-1 (2025-05-22)"
     },
     "cmps": {
-        "hiyori_last_boot": {
+        "debian_last_boot": {
             "p": "sensor",
             "name": "Last Boot",
             "icon": "mdi:clock",
-            "state_topic": "homeassistant/sensor/hiyori_uptime/state",
+            "state_topic": "homeassistant/sensor/debian_uptime/state",
             "value_template": "{{now() - timedelta( seconds = value_json.uptime |int(0))}}",
             "device_class": "timestamp",
-            "unique_id": "hiyori_last_boot"
+            "unique_id": "debian_last_boot"
         },
-        "hiyori_cpu_temp": {
+        "debian_cpu_temp": {
             "p": "sensor",
             "name": "CPU Temperature",
             "unit_of_measurement": "\u00b0C",
-            "state_topic": "homeassistant/sensor/hiyori_cpu_temp/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_cpu_temp/state",
+            "state_topic": "homeassistant/sensor/debian_cpu_temp/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_cpu_temp/state",
             "json_attributes_template": "{{ value_json.attrs | tojson }}",
             "value_template": "{{ value_json.temperature }}",
             "device_class": "temperature",
             "icon": "mdi:thermometer",
-            "unique_id": "hiyori_cpu_temp",
+            "unique_id": "debian_cpu_temp",
             "state_class": "measurement"
         },
-        "hiyori_cpu_usage": {
+        "debian_cpu_usage": {
             "p": "sensor",
             "name": "CPU Usage",
             "unit_of_measurement": "%",
-            "state_topic": "homeassistant/sensor/hiyori_avg_cpu/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_avg-cpu/state",
+            "state_topic": "homeassistant/sensor/debian_avg_cpu/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_avg-cpu/state",
             "json_attributes_template": "{{ value_json | tojson }}",
             "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
             "icon": "mdi:processor",
-            "unique_id": "hiyori_cpu_usage",
+            "unique_id": "debian_cpu_usage",
             "state_class": "measurement"
         },
-        "hiyori_memory_usage": {
+        "debian_memory_usage": {
             "p": "sensor",
             "name": "Memory Usage",
             "unit_of_measurement": "%",
-            "state_topic": "homeassistant/sensor/hiyori_memory_usage/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_memory_usage/state",
+            "state_topic": "homeassistant/sensor/debian_memory_usage/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_memory_usage/state",
             "json_attributes_template": "{{ value_json.mem | tojson }}",
             "value_template": "{{ value_json.mem_usage }}",
             "icon": "mdi:memory",
-            "unique_id": "hiyori_memory_usage",
+            "unique_id": "debian_memory_usage",
             "state_class": "measurement"
         },
-        "hiyori_swap_usage": {
+        "debian_swap_usage": {
             "p": "sensor",
             "name": "Swap Usage",
             "unit_of_measurement": "%",
-            "state_topic": "homeassistant/sensor/hiyori_memory_usage/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_swap_usage/state",
+            "state_topic": "homeassistant/sensor/debian_memory_usage/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_swap_usage/state",
             "json_attributes_template": "{{ value_json.swap | tojson }}",
             "value_template": "{{ value_json.swap_usage }}",
             "icon": "mdi:memory",
-            "unique_id": "hiyori_swap_usage",
+            "unique_id": "debian_swap_usage",
             "state_class": "measurement"
         },
-        "hiyori_disk_smart_0023762053110": {
+        "debian_disk_smart_0023762053110": {
             "p": "sensor",
             "name": "Disk SMART 00237620",
-            "state_topic": "homeassistant/sensor/hiyori_disk_smart_0023762053110/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_smart_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_smart_0023762053110/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_smart_0023762053110/state",
             "json_attributes_template": "{{ value_json.smart | tojson }}",
             "value_template": "{{ value_json.info.device_name }}",
             "device_class": "diagnostic",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_smart_0023762053110",
+            "unique_id": "debian_disk_smart_0023762053110",
             "state_class": "measurement"
         },
-        "hiyori_disk_info_0023762053110": {
+        "debian_disk_info_0023762053110": {
             "p": "sensor",
             "name": "Disk Info 00237620",
-            "state_topic": "homeassistant/sensor/hiyori_disk_info_0023762053110/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_info_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_info_0023762053110/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_info_0023762053110/state",
             "json_attributes_template": "{{ value_json.info | tojson }}",
             "value_template": "{{ value_json.info.device_name }}",
             "device_class": "diagnostic",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_info_0023762053110"
+            "unique_id": "debian_disk_info_0023762053110"
         },
-        "hiyori_disk_write_0023762053110": {
+        "debian_disk_write_0023762053110": {
             "p": "sensor",
             "name": "root disk write speed",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_0023762053110/state",
             "value_template": "{{ value_json.read_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_write_0023762053110",
+            "unique_id": "debian_disk_write_0023762053110",
             "state_class": "measurement"
         },
-        "hiyori_disk_read_0023762053110": {
+        "debian_disk_read_0023762053110": {
             "p": "sensor",
             "name": "root disk read speed",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_0023762053110/state",
             "value_template": "{{ value_json.write_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_read_0023762053110",
+            "unique_id": "debian_disk_read_0023762053110",
             "state_class": "measurement"
         },
-        "hiyori_disk_util_0023762053110": {
+        "debian_disk_util_0023762053110": {
             "p": "sensor",
             "name": "root disk utilization",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_0023762053110/state",
             "value_template": "{{ value_json.util | float(0) }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_util_0023762053110",
+            "unique_id": "debian_disk_util_0023762053110",
             "state_class": "measurement"
         },
-        "hiyori_disk_usage_0023762053110": {
+        "debian_disk_usage_0023762053110": {
             "p": "sensor",
             "name": "root disk usage",
-            "state_topic": "homeassistant/sensor/hiyori_disk_usage_0023762053110/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_usage_0023762053110/state",
+            "state_topic": "homeassistant/sensor/debian_disk_usage_0023762053110/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_usage_0023762053110/state",
             "json_attributes_template": "{{ value_json.attrs | tojson }}",
             "value_template": "{{ value_json.usage_percent }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_usage_0023762053110",
+            "unique_id": "debian_disk_usage_0023762053110",
             "state_class": "measurement"
         },
-        "hiyori_disk_smart_9VM861KX": {
+        "debian_disk_smart_9VM861KX": {
             "p": "sensor",
             "name": "Disk SMART 9VM861KX",
-            "state_topic": "homeassistant/sensor/hiyori_disk_smart_9VM861KX/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_smart_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_smart_9VM861KX/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_smart_9VM861KX/state",
             "json_attributes_template": "{{ value_json.smart | tojson }}",
             "value_template": "{{ value_json.info.device_name }}",
             "device_class": "diagnostic",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_smart_9VM861KX",
+            "unique_id": "debian_disk_smart_9VM861KX",
             "state_class": "measurement"
         },
-        "hiyori_disk_info_9VM861KX": {
+        "debian_disk_info_9VM861KX": {
             "p": "sensor",
             "name": "Disk Info 9VM861KX",
-            "state_topic": "homeassistant/sensor/hiyori_disk_info_9VM861KX/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_info_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_info_9VM861KX/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_info_9VM861KX/state",
             "json_attributes_template": "{{ value_json.info | tojson }}",
             "value_template": "{{ value_json.info.device_name }}",
             "device_class": "diagnostic",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_info_9VM861KX"
+            "unique_id": "debian_disk_info_9VM861KX"
         },
-        "hiyori_disk_write_9VM861KX": {
+        "debian_disk_write_9VM861KX": {
             "p": "sensor",
             "name": "Disk 9VM861KX write speed",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_9VM861KX/state",
             "value_template": "{{ value_json.write_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_write_9VM861KX",
+            "unique_id": "debian_disk_write_9VM861KX",
             "state_class": "measurement"
         },
-        "hiyori_disk_read_9VM861KX": {
+        "debian_disk_read_9VM861KX": {
             "p": "sensor",
             "name": "Disk 9VM861KX read speed",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_9VM861KX/state",
             "value_template": "{{ value_json.read_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_read_9VM861KX",
+            "unique_id": "debian_disk_read_9VM861KX",
             "state_class": "measurement"
         },
-        "hiyori_disk_util_9VM861KX": {
+        "debian_disk_util_9VM861KX": {
             "p": "sensor",
             "name": "Disk 9VM861KX utilization",
-            "state_topic": "homeassistant/sensor/hiyori_disk_load_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_load_9VM861KX/state",
             "value_template": "{{ value_json.util | float(0) }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_util_9VM861KX",
+            "unique_id": "debian_disk_util_9VM861KX",
             "state_class": "measurement"
         },
-        "hiyori_disk_usage_9VM861KX": {
+        "debian_disk_usage_9VM861KX": {
             "p": "sensor",
             "name": "Disk 9VM861KX usage",
-            "state_topic": "homeassistant/sensor/hiyori_disk_usage_9VM861KX/state",
-            "json_attributes_topic": "homeassistant/sensor/hiyori_disk_usage_9VM861KX/state",
+            "state_topic": "homeassistant/sensor/debian_disk_usage_9VM861KX/state",
+            "json_attributes_topic": "homeassistant/sensor/debian_disk_usage_9VM861KX/state",
             "json_attributes_template": "{{ value_json.attrs | tojson }}",
             "value_template": "{{ value_json.usage_percent }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "hiyori_disk_usage_9VM861KX",
+            "unique_id": "debian_disk_usage_9VM861KX",
             "state_class": "measurement"
         },
-        "hiyori_net_stats_lan_rx": {
+        "debian_net_stats_lan_rx": {
             "p": "sensor",
-            "name": "hiyori lan Rx speed",
-            "state_topic": "homeassistant/sensor/hiyori_net_stats_lan/state",
+            "name": "debian lan Rx speed",
+            "state_topic": "homeassistant/sensor/debian_net_stats_lan/state",
             "value_template": "{{ value_json.rx_speed | int(0)}}",
             "unit_of_measurement": "B/s",
             "icon": "mdi:download",
-            "unique_id": "hiyori_net_stats_lan_rx",
+            "unique_id": "debian_net_stats_lan_rx",
             "state_class": "measurement"
         },
-        "hiyori_net_stats_lan_tx": {
+        "debian_net_stats_lan_tx": {
             "p": "sensor",
-            "name": "hiyori lan Tx speed",
-            "state_topic": "homeassistant/sensor/hiyori_net_stats_lan/state",
+            "name": "debian lan Tx speed",
+            "state_topic": "homeassistant/sensor/debian_net_stats_lan/state",
             "value_template": "{{ value_json.tx_speed | int(0)}}",
             "unit_of_measurement": "B/s",
             "icon": "mdi:upload",
-            "unique_id": "hiyori_net_stats_lan_tx",
+            "unique_id": "debian_net_stats_lan_tx",
             "state_class": "measurement"
         },
-        "hiyori_net_stats_lan_link_speed": {
+        "debian_net_stats_lan_link_speed": {
             "p": "sensor",
-            "name": "hiyori lan Link Speed",
-            "state_topic": "homeassistant/sensor/hiyori_net_stats_lan/state",
+            "name": "debian lan Link Speed",
+            "state_topic": "homeassistant/sensor/debian_net_stats_lan/state",
             "value_template": "{{ value_json.link_speed | int(0)}}",
             "unit_of_measurement": "Mb/s",
             "icon": "mdi:speedometer",
-            "unique_id": "hiyori_net_stats_lan_link_speed",
+            "unique_id": "debian_net_stats_lan_link_speed",
             "state_class": "measurement"
         },
-        "hiyori_net_stats_lan_duplex": {
+        "debian_net_stats_lan_duplex": {
             "p": "sensor",
-            "name": "hiyori lan Duplex",
-            "state_topic": "homeassistant/sensor/hiyori_net_stats_lan/state",
+            "name": "debian lan Duplex",
+            "state_topic": "homeassistant/sensor/debian_net_stats_lan/state",
             "value_template": "{{ value_json.duplex }}",
             "icon": "mdi:network",
-            "unique_id": "hiyori_net_stats_lan_duplex",
+            "unique_id": "debian_net_stats_lan_duplex",
             "state_class": "measurement"
         }
     }

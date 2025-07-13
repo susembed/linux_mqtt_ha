@@ -5,7 +5,12 @@ Linux System Monitoring Script with MQTT and Home Assistant Discovery
 Monitors: CPU usage/temp, System load, Memory, Disk SMART, Disk I/O
 Publishes to MQTT broker with Home Assistant autodiscovery
 """
-
+# TODO:
+# - Get OS name from /etc/os-release
+# - Add disk temperature sensors
+# - Fix paho-mqtt client connection issues
+# - Add disk status: active, idle, inactive
+# - Add docker container monitoring
 import json
 import time
 import subprocess
@@ -14,7 +19,7 @@ import signal
 import sys
 import os
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import paho.mqtt.client as mqtt
 
 # Load environment variables from .env file
@@ -169,7 +174,7 @@ class LinuxSystemMonitor:
         if retain:
             cmd.append("-r")
         print(self.run_command(cmd))
-        print(f"Running command: {' '.join(cmd)}")
+        # print(f"Running command: {' '.join(cmd)}")
         # if self.mqtt_client and getattr(self, 'mqtt_connected', False):
         #     # Add debugging output
         #     print(f"Publishing to topic: {topic}")
@@ -501,45 +506,21 @@ class LinuxSystemMonitor:
                 return {}
         
         # Use smartctl with JSON output for comprehensive SMART data
-        output = self.run_command(["smartctl", "-A", "-j", disk_path])
+        output = self.run_command(["smartctl", "-A", "-H", "-j", disk_path])
         if not output:
             return {}
         
         try:
             data = json.loads(output)
-            
-            # Extract device info
-            info = {
-                "device_name": data.get("device", {}).get("name", disk_path),
-                "model_family": data.get("model_family", "Unknown"),
-                "model_name": data.get("model_name", "Unknown"),
-                "serial_number": data.get("serial_number", "Unknown"),
-                "firmware_version": data.get("firmware_version", "Unknown"),
-                "user_capacity": data.get("user_capacity", {}).get("bytes", 0),
-                "logical_block_size": data.get("logical_block_size", 512),
-                "rotation_rate": data.get("rotation_rate", 0),
-                "form_factor": data.get("form_factor", {}).get("name", "Unknown"),
-                "interface_speed": f"{data.get('interface_speed', {}).get('current', {}).get('string', 'Unknown')} / {data.get('interface_speed', {}).get('max', {}).get('string', 'Unknown')}",
-                "smart_available": data.get("smart_support", {}).get("available", False)
-            }
-            
+
             # Extract SMART attributes
-            smart_attrs = {}
-            
-            # Add overall health status
-            if "smart_status" in data:
-                smart_attrs["health_status"] = "PASSED" if data["smart_status"].get("passed", False) else "FAILED"
-            
-            # Add temperature if available
-            if "temperature" in data:
-                smart_attrs["temperature"] = data["temperature"].get("current", 0)
-            
-            # Add power on time and cycle count if available
-            if "power_on_time" in data:
-                smart_attrs["power_on_hours"] = data["power_on_time"].get("hours", 0)
-            if "power_cycle_count" in data:
-                smart_attrs["power_cycle_count"] = data.get("power_cycle_count", 0)
-            
+            smart_attrs = {
+                "smart_passed": 1 if data.get("smart_status", {}).get("passed", False) else 0,
+                "temperature": data.get("temperature", {}).get("current", 0),
+                "power_on_hours": data.get("power_on_time", {}).get("hours", 0),
+                "power_cycle_count": data.get("power_cycle_count", 0),
+                "attrs":{}
+            }
             # Parse SMART attributes table
             smart_table = data.get("ata_smart_attributes", {}).get("table", [])
             for attr in smart_table:
@@ -554,18 +535,14 @@ class LinuxSystemMonitor:
                     key = attr_name.lower()
                 
                 # Store both normalized value and raw value
-                smart_attrs[key] = attr_value
+                smart_attrs["attrs"][key] = attr_value
             
             return smart_attrs
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
-            # Fallback to simple health check
-            health_output = self.run_command(["smartctl", "-H", disk_path])
-            health_status = "PASSED" if "PASSED" in health_output else "FAILED"
             
             return {
-                "health_status": health_status
             }
 
     def get_disk_info(self, device_path: str) -> Dict:
@@ -610,18 +587,35 @@ class LinuxSystemMonitor:
                 "smart_available": True
             }
 
+    def get_os_info(self) -> str:
+        """Get OS pretty name from /etc/os-release"""
+        try:
+            with open('/etc/os-release', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('PRETTY_NAME='):
+                        # Remove PRETTY_NAME= and strip quotes
+                        value = line.split('=', 1)[1]
+                        return value.strip('"').strip("'")
+        except (FileNotFoundError, IOError):
+            pass
+        
+        # Fallback to uname if /etc/os-release not available
+        return self.run_command(['uname', '-o'])
+    
     def setup_discovery(self):
         """Setup Home Assistant discovery configurations"""
         print("Setting up Home Assistant discovery...")
         self.topics['cpu_temp'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state"
         self.topics['cpu_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state"
         self.topics['memory_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state"
+        self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
 
         dev_discovery = {
             "dev": {
                 "ids": self.device_id,
                 "name": self.device_name,
-                "sw_version": f"{self.run_command(['uname', '-v'])}",
+                "sw_version": self.get_os_info(),
             },
             "o": {
                 "name": "Linux System Monitor",
@@ -631,8 +625,8 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "Last Boot",
                     "icon":"mdi:clock",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state",
-                    "value_template":"{{now() - timedelta( seconds = value_json.uptime |int(0))}}",
+                    "state_topic": f"{self.topics['uptime']}",
+                    "value_template":"{{now() - timedelta( seconds = (value |float(0)))}}",
                     "device_class":"timestamp",
                     "unique_id": f"{self.device_id}_last_boot",
                 },
@@ -640,7 +634,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "CPU Temperature",
                     "unit_of_measurement": "°C",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state",
+                    "state_topic": f"{self.topics['cpu_temp']}",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state",
                     "json_attributes_template": "{{ value_json.attrs | tojson }}",
                     "value_template": "{{ value_json.temperature }}",
@@ -653,11 +647,12 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "CPU Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state",
+                    "suggested_display_precision": 1,
+                    "state_topic": f"{self.topics['cpu_usage']}",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg-cpu/state",
                     "json_attributes_template": "{{ value_json | tojson }}",
                     "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
-                    "icon": "mdi:processor",
+                    "icon": "mdi:cpu-64-bit",
                     "unique_id": f"{self.device_id}_cpu_usage",
                     "state_class": "measurement"
                 },
@@ -665,7 +660,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "Memory Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state",
+                    "state_topic": f"{self.topics['memory_usage']}",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state",
                     "json_attributes_template": "{{ value_json.mem | tojson }}",
                     "value_template": "{{ value_json.mem_usage }}",
@@ -677,7 +672,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "Swap Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state",
+                    "state_topic": f"{self.topics['memory_usage']}",
                     "json_attributes_topic": f"{self.ha_discovery_prefix}/sensor/{self.device_id}_swap_usage/state",
                     "json_attributes_template": "{{ value_json.swap | tojson }}",
                     "value_template": "{{ value_json.swap_usage }}",
@@ -688,8 +683,6 @@ class LinuxSystemMonitor:
             }
         }
 
-        
-        
         # Disk sensors
         self.topics['disk_smart'] = {}
         self.topics['disk_info'] = {}
@@ -709,24 +702,24 @@ class LinuxSystemMonitor:
             self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
 
             dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"Disk SMART {serial[:8]}",
+                "p": "binary_sensor",
+                "name": f"Disk {serial[:8]} SMART health",
                 "state_topic": self.topics['disk_smart'][serial],
                 "json_attributes_topic": self.topics['disk_smart'][serial],
-                "json_attributes_template": "{{ value_json.smart | tojson }}",
-                "value_template": "{{ value_json.info.device_name }}",
-                # "device_class": "diagnostic",
+                "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
+                "device_class": "problem",
                 "icon": "mdi:harddisk",
                 "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
-                "state_class": "measurement"
+                # "state_class": "measurement"
             }
             dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
                 "p": "sensor",
-                "name": f"Disk Info {serial[:8]}",
+                "name": f"Disk {serial[:8]} Info",
                 "state_topic": self.topics['disk_info'][serial],
                 "json_attributes_topic": self.topics['disk_info'][serial],
-                "json_attributes_template": "{{ value_json.info | tojson }}",
-                "value_template": "{{ value_json.info.device_name }}",
+                "json_attributes_template": "{{ value_json | tojson }}",
+                "value_template": "{{ value_json.model_name }}",
                 # "device_class": "diagnostic",
                 "icon": "mdi:harddisk",
                 "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
@@ -737,6 +730,7 @@ class LinuxSystemMonitor:
                     "name": f"root disk write speed",
                     "state_topic": self.topics['disk_load'][serial],
                     "value_template": "{{ value_json.read_kbs | float(0) }}",
+                    "device_class": "data_rate",
                     "unit_of_measurement": "kB/s",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
@@ -747,6 +741,7 @@ class LinuxSystemMonitor:
                     "name": f"root disk read speed",
                     "state_topic": self.topics['disk_load'][serial],
                     "value_template": "{{ value_json.write_kbs | float(0) }}",
+                    "device_class": "data_rate",
                     "unit_of_measurement": "kB/s",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
@@ -781,6 +776,7 @@ class LinuxSystemMonitor:
                     "state_topic": self.topics['disk_load'][serial],
                     "value_template": "{{ value_json.write_kbs | float(0) }}",
                     "unit_of_measurement": "kB/s",
+                    "device_class": "data_rate",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
                     "state_class": "measurement"
@@ -791,6 +787,7 @@ class LinuxSystemMonitor:
                     "state_topic": self.topics['disk_load'][serial],
                     "value_template": "{{ value_json.read_kbs | float(0) }}",
                     "unit_of_measurement": "kB/s",
+                    "device_class": "data_rate",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
                     "state_class": "measurement"
@@ -828,6 +825,7 @@ class LinuxSystemMonitor:
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.rx_speed | int(0)}}", 
                 "unit_of_measurement": "B/s",
+                "device_class": "data_rate",
                 "icon": "mdi:download",
                 "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
                 "state_class": "measurement"
@@ -838,6 +836,7 @@ class LinuxSystemMonitor:
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.tx_speed | int(0)}}", 
                 "unit_of_measurement": "B/s",
+                "device_class": "data_rate",
                 "icon": "mdi:upload",
                 "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
                 "state_class": "measurement"
@@ -847,7 +846,9 @@ class LinuxSystemMonitor:
                 "name": f"{self.device_id} {if_name} Link Speed",
                 "state_topic": self.topics['net_stats'][if_name],
                 "value_template": "{{ value_json.link_speed | int(0)}}", 
-                "unit_of_measurement": "Mb/s",
+                "unit_of_measurement": "Mbit/s",
+                "suggested_display_precision": 0,
+                "device_class": "data_rate",
                 "icon": "mdi:speedometer",
                 "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_link_speed",
                 "state_class": "measurement"
@@ -859,7 +860,6 @@ class LinuxSystemMonitor:
                 "value_template": "{{ value_json.duplex }}",
                 "icon": "mdi:network",
                 "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
-                "state_class": "measurement"
             }
 
         self.mqtt_publish(f"{self.ha_discovery_prefix}/device/{self.device_id}/config", json.dumps(dev_discovery), True)
@@ -867,8 +867,10 @@ class LinuxSystemMonitor:
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
         print("Publishing one-time sensors...")
+        with open('/proc/uptime', 'r') as f:
+            uptime_seconds = float(f.read().split()[0])
         # uptime_hours = self.get_uptime_hours()
-        # self.mqtt_publish(self.topics['uptime'], str(uptime_hours))
+        self.mqtt_publish(self.topics['uptime'], str(uptime_seconds), True)
     
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
@@ -895,7 +897,7 @@ class LinuxSystemMonitor:
                     continue
                 
                 disk_info = self.get_disk_info(disk_path)
-                self.mqtt_publish(self.topics['disk_info'][serial], json.dumps(disk_info))
+                self.mqtt_publish(self.topics['disk_info'][serial], json.dumps(disk_info), True)
     def publish_network_sensors(self):
         """Publish network interface sensors"""
         # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting network interface data...")
@@ -940,7 +942,7 @@ class LinuxSystemMonitor:
                 continue
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
-        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
+        # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
         
         # Prepare network interface sensors before collecting iostat data
         for ifname  in self.ifs_name:
@@ -1003,6 +1005,9 @@ class LinuxSystemMonitor:
         print(f"Starting Linux System Monitor for {self.device_name}")
         print(f"MQTT Broker: {self.mqtt_broker}:{self.mqtt_port}")
         
+        # Setup MQTT connection
+        # self.setup_mqtt()
+        
         # Get OS's root partition block device
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
         self.root_disk = re.sub(r'\d+$', '', self.root_block)  # Remove partition number
@@ -1021,8 +1026,6 @@ class LinuxSystemMonitor:
         signal.signal(signal.SIGINT, self.cleanup)
         signal.signal(signal.SIGTERM, self.cleanup)
         
-        # Setup MQTT connection
-        self.setup_mqtt()
         
         # Setup Home Assistant discovery
         # self.setup_discovery()
@@ -1044,7 +1047,7 @@ class LinuxSystemMonitor:
             # Publish fast sensors (includes built-in sleep via iostat)
             self.publish_fast_sensors()
             
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Published sensor data (next update in {self.fast_interval}s)")
+            # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Published sensor data (next update in {self.fast_interval}s)")
             # No need for sleep here as iostat already waits fast_interval seconds
     
     def update_disk_mapping(self) -> Dict[str, str]:
@@ -1097,6 +1100,11 @@ class LinuxSystemMonitor:
             print(f"Updated disk mapping: {len(self.disk_serial_mapping)} disks found")
 
             self.setup_discovery()  # Update discovery configuration
+            # Add delay to allow Home Assistant to process discovery messages
+            if not self.dry_run:
+                print("Waiting for Home Assistant to process discovery messages...")
+                time.sleep(5)  # 5 second delay
+            
             self.publish_disk_info_and_status()
             print("Updated disk entities discovery and disk info and status values")
             for serial, path in self.disk_serial_mapping.items():
