@@ -6,8 +6,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/linux_mqtt_ha"
-SERVICE_NAME="linux-monitor-python"
+INSTALL_DIR="/etc/linux_mqtt_ha"
+SERVICE_NAME="linux-mqtt-ha"
 
 echo "Linux MQTT Home Assistant Monitor (Python) - Configuration Script"
 echo "================================================================="
@@ -28,14 +28,14 @@ install_dependencies() {
     apt-get update
     
     # Install required packages
-    apt-get install -y python3 python3-pip smartmontools lm-sensors sysstat
+    apt-get install smartmontools lm-sensors sysstat
     
     # Install Python MQTT library
-    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-        pip3 install -r "$SCRIPT_DIR/requirements.txt"
-    else
-        pip3 install paho-mqtt
-    fi
+    # if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+    #     pip3 install -r "$SCRIPT_DIR/requirements.txt"
+    # else
+    #     pip3 install paho-mqtt
+    # fi
     
     echo "Dependencies installed successfully"
 }
@@ -49,6 +49,11 @@ install_files() {
     
     # Copy Python script
     cp "$SCRIPT_DIR/mqtt_linux_monitoring.py" "$INSTALL_DIR/"
+    if [ -f "$SCRIPT_DIR/.env" ]; then
+        echo ".env already exists, skipping copy"
+    else
+        cp "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
+    fi
     chmod +x "$INSTALL_DIR/mqtt_linux_monitoring.py"
     
     # Copy requirements.txt if it exists
@@ -64,7 +69,7 @@ configure_service() {
     echo "Configuring systemd service..."
     
     # Copy service file
-    cp "$SCRIPT_DIR/linux-monitor-python.service" "/etc/systemd/system/"
+    cp "$SCRIPT_DIR/linux-mqtt-ha.service" "/etc/systemd/system/"
     
     # Reload systemd
     systemctl daemon-reload
@@ -77,19 +82,11 @@ configure_mqtt() {
     echo ""
     echo "MQTT Configuration"
     echo "=================="
-    echo "You can edit the MQTT settings directly in the Python script:"
-    echo "$INSTALL_DIR/mqtt_linux_monitoring.py"
-    echo ""
-    echo "Look for these variables in the __init__ method:"
-    echo "  self.mqtt_broker = \"localhost\""
-    echo "  self.mqtt_port = 1883"
-    echo "  self.mqtt_user = \"\""
-    echo "  self.mqtt_pass = \"\""
-    echo ""
+    echo "You need to configure enviroment variable in .env file."
     read -p "Would you like to edit the configuration now? (y/N): " edit_config
     
     if [[ $edit_config =~ ^[Yy]$ ]]; then
-        ${EDITOR:-nano} "$INSTALL_DIR/mqtt_linux_monitoring.py"
+        ${EDITOR:-nano} "$INSTALL_DIR/.env"
     fi
 }
 

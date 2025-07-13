@@ -173,7 +173,7 @@ class LinuxSystemMonitor:
         ]
         if retain:
             cmd.append("-r")
-        print(self.run_command(cmd))
+        self.run_command(cmd)
         # print(f"Running command: {' '.join(cmd)}")
         # if self.mqtt_client and getattr(self, 'mqtt_connected', False):
         #     # Add debugging output
@@ -1007,7 +1007,7 @@ class LinuxSystemMonitor:
         
         # Setup MQTT connection
         # self.setup_mqtt()
-        
+
         # Get OS's root partition block device
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
         self.root_disk = re.sub(r'\d+$', '', self.root_block)  # Remove partition number
