@@ -738,7 +738,7 @@ class LinuxSystemMonitor:
             },
             "o": {
                 "name": "linux_mqtt_ha",
-                "sw": "1.0",
+                "sw": "1.1",
                 "url": "https://github.com/susembed/linux_mqtt_ha"
             },
             "cmps": {
@@ -974,7 +974,7 @@ class LinuxSystemMonitor:
     
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
-        print("Publishing slow interval sensors (SMART data)...")
+        # print("Publishing slow interval sensors (SMART data)...")
         
         # Update disk mapping and get current serials
         disk_serials = self.get_disk_list_by_serial()
