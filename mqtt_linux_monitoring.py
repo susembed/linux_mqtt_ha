@@ -83,7 +83,7 @@ class LinuxSystemMonitor:
             return True
             
         missing_deps = []
-        required_commands = ["smartctl", "sensors", "iostat"]
+        required_commands = ["smartctl", "sensors", "iostat", "hdparm"]
         
         for cmd in required_commands:
             if subprocess.run(["which", cmd], capture_output=True).returncode != 0:
@@ -93,6 +93,8 @@ class LinuxSystemMonitor:
                     missing_deps.append("lm-sensors")
                 elif cmd == "iostat":
                     missing_deps.append("sysstat")
+                elif cmd == "hdparm":
+                    missing_deps.append("hdparm")
         
         if missing_deps:
             print(f"Missing dependencies: {', '.join(missing_deps)}")
@@ -440,6 +442,26 @@ class LinuxSystemMonitor:
                         except ValueError:
                             continue
         return 0.0
+    def get_disk_status(self, disk_or_serial: str) -> Dict:
+        """Get disk power status using hdparm (accepts device path or serial)"""
+        # Determine if input is a serial or device path
+        if disk_or_serial.startswith('/dev/'):
+            disk_path = disk_or_serial
+        else:
+            disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
+            if not disk_path:
+                return {"status": "unknown", "error": "Device not found"}
+        
+        output = self.run_command(["hdparm", "-C", disk_path])
+        if output:
+            for line in output.split('\n'):
+                if "drive state is:" in line:
+                    # Extract status after "drive state is:"
+                    status = line.split("drive state is:")[1].strip()
+                    return {"status": status}
+        
+        return {"status": "unknown", "error": "Failed to get status"}
+
     def get_disk_usage(self, block_path: str) -> Dict:
         """Get disk usage statistics using lsblk with JSON output (accepts device path)"""
         # Use lsblk with JSON output
@@ -517,8 +539,8 @@ class LinuxSystemMonitor:
             smart_attrs = {
                 "smart_passed": 1 if data.get("smart_status", {}).get("passed", False) else 0,
                 "temperature": data.get("temperature", {}).get("current", 0),
-                "power_on_hours": data.get("power_on_time", {}).get("hours", 0),
-                "power_cycle_count": data.get("power_cycle_count", 0),
+                # "power_on_hours": data.get("power_on_time", {}).get("hours", 0),
+                # "power_cycle_count": data.get("power_cycle_count", 0),
                 "attrs":{}
             }
             # Parse SMART attributes table
@@ -533,8 +555,6 @@ class LinuxSystemMonitor:
                     key = f"attribute_{attr_id}"
                 else:
                     key = attr_name.lower()
-                
-                # Store both normalized value and raw value
                 smart_attrs["attrs"][key] = attr_value
             
             return smart_attrs
@@ -543,6 +563,11 @@ class LinuxSystemMonitor:
             print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
             
             return {
+                "smart_passed": 0,
+                "temperature": 0,
+                "attrs": {
+                    "error": "Failed to parse SMART data"
+                }
             }
 
     def get_disk_info(self, device_path: str) -> Dict:
@@ -640,7 +665,7 @@ class LinuxSystemMonitor:
                     "name": "Last Boot",
                     "icon":"mdi:clock",
                     "state_topic": f"{self.topics['uptime']}",
-                    "value_template":"{{now() - timedelta( seconds = (value |float(0)))}}",
+                    "value_template":"{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
                     "device_class":"timestamp",
                     "unique_id": f"{self.device_id}_last_boot",
                 },
@@ -702,6 +727,7 @@ class LinuxSystemMonitor:
         self.topics['disk_info'] = {}
         self.topics['disk_load'] = {}
         self.topics['disk_usage'] = {}
+        self.topics['disk_status'] = {}
         
         # Get initial disk mapping
         disk_serials = self.get_disk_list_by_serial()
@@ -714,6 +740,7 @@ class LinuxSystemMonitor:
             self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
             self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
             self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
+            self.topics['disk_status'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_status_{safe_serial}/state"
 
             if self.disk_serial_mapping.get(serial) == self.root_disk:
                 disk_name = "disk root"
@@ -797,6 +824,14 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
                 "state_class": "measurement"
             }
+            dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
+                "p": "sensor",
+                "name": f"{disk_name} status",
+                "state_topic": self.topics['disk_status'][serial],
+                "value_template": "{{ value_json.status }}",
+                "icon": "mdi:power",
+                "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
+            }
 
         self.topics['net_stats'] = {}
         for if_name in self.ifs_name:
@@ -866,6 +901,10 @@ class LinuxSystemMonitor:
             if serial in self.topics['disk_smart']:
                 smart_data = self.get_disk_smart(serial)
                 self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
+            
+            if serial in self.topics['disk_status']:
+                status_data = self.get_disk_status(serial)
+                self.mqtt_publish(self.topics['disk_status'][serial], json.dumps(status_data))
     def publish_disk_info_and_status(self):
         """Publish disk info and status sensors"""
         print("Publishing disk info and status sensors...")
