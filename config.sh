@@ -54,7 +54,7 @@ install_files() {
     
     # Copy Python script
     cp "$SCRIPT_DIR/mqtt_linux_monitoring.py" "$INSTALL_DIR/"
-    if [ -f "$SCRIPT_DIR/.env" ]; then
+    if [ -f "$INSTALL_DIR/.env" ]; then
         echo ".env already exists, skipping copy"
     else
         cp "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
