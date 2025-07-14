@@ -43,6 +43,11 @@ class LinuxSystemMonitor:
         interfaces_str = os.getenv("NETWORK_INTERFACES", "lan")
         self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
 
+        self.ignore_sensors = [sensor.strip() for sensor in os.getenv("IGNORE_SENSORS", "").split(",") if sensor.strip()]
+        self.ignore_disks_for_smart = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_SMART", "").split(",") if disk.strip()]
+        self.ignore_disks_for_temp = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_TEMP", "").split(",") if disk.strip()]
+        self.ignore_disks_for_status = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_STATUS", "").split(",") if disk.strip()]
+        self.ignore_disks_for_usage = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_USAGE", "").split(",") if disk.strip()]
         
         # Intervals (in seconds) - Load from environment variables
         self.fast_interval = int(os.getenv("FAST_INTERVAL", "10"))
@@ -724,11 +729,6 @@ class LinuxSystemMonitor:
     def setup_discovery(self):
         """Setup Home Assistant discovery configurations"""
         print("Setting up Home Assistant discovery...")
-        self.topics['cpu_temp'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state"
-        self.topics['cpu_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state"
-        self.topics['memory_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state"
-        self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
-
         dev_discovery = {
             "dev": {
                 "ids": self.device_id,
@@ -741,43 +741,54 @@ class LinuxSystemMonitor:
                 "sw": "1.1",
                 "url": "https://github.com/susembed/linux_mqtt_ha"
             },
-            "cmps": {
-                f"{self.device_id}_last_boot": {
-                    "p": "sensor",
-                    "name": "Last Boot",
-                    "icon":"mdi:clock",
-                    "state_topic": f"{self.topics['uptime']}",
-                    "value_template":"{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
-                    "device_class":"timestamp",
-                    "unique_id": f"{self.device_id}_last_boot",
-                },
-                f"{self.device_id}_cpu_temp": {
-                    "p": "sensor",
-                    "name": "CPU Temperature",
-                    "unit_of_measurement": "°C",
-                    "state_topic": f"{self.topics['cpu_temp']}",
-                    "json_attributes_topic": f"{self.topics['cpu_temp']}",
-                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                    "value_template": "{{ value_json.temperature }}",
-                    "device_class": "temperature",
-                    "icon": "mdi:thermometer",
-                    "unique_id": f"{self.device_id}_cpu_temp",
-                    "state_class": "measurement",
-                },
-                f"{self.device_id}_cpu_usage": {
-                    "p": "sensor",
-                    "name": "CPU Usage",
-                    "unit_of_measurement": "%",
-                    "suggested_display_precision": 1,
-                    "state_topic": f"{self.topics['cpu_usage']}",
-                    "json_attributes_topic": f"{self.topics['cpu_usage']}",
-                    "json_attributes_template": "{{ value_json | tojson }}",
-                    "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
-                    "icon": "mdi:cpu-64-bit",
-                    "unique_id": f"{self.device_id}_cpu_usage",
-                    "state_class": "measurement"
-                },
-                f"{self.device_id}_memory_usage": {
+            "cmps": {}
+        }
+
+        if "last_boot" not in self.ignore_sensors:
+            self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
+            dev_discovery["cmps"][f"{self.device_id}_last_boot"] = {
+                "p": "sensor",
+                "name": "Last Boot",
+                "icon":"mdi:clock",
+                "state_topic": f"{self.topics['uptime']}",
+                "value_template":"{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
+                "device_class":"timestamp",
+                "unique_id": f"{self.device_id}_last_boot",
+            }
+        if "cpu_usage" not in self.ignore_sensors:
+            self.topics['cpu_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state"
+            dev_discovery["cmps"][f"{self.device_id}_cpu_usage"] = {
+                "p": "sensor",
+                "name": "CPU Usage",
+                "unit_of_measurement": "%",
+                "suggested_display_precision": 1,
+                "state_topic": f"{self.topics['cpu_usage']}",
+                "json_attributes_topic": f"{self.topics['cpu_usage']}",
+                "json_attributes_template": "{{ value_json | tojson }}",
+                "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
+                "icon": "mdi:cpu-64-bit",
+                "unique_id": f"{self.device_id}_cpu_usage",
+                "state_class": "measurement"
+            }
+        if "cpu_temp" not in self.ignore_sensors:
+            self.topics['cpu_temp'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state"
+            dev_discovery["cmps"][f"{self.device_id}_cpu_temp"] = {
+                "p": "sensor",
+                "name": "CPU Temperature",
+                "unit_of_measurement": "°C",
+                "state_topic": f"{self.topics['cpu_temp']}",
+                "json_attributes_topic": f"{self.topics['cpu_temp']}",
+                "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                "value_template": "{{ value_json.temperature }}",
+                "device_class": "temperature",
+                "icon": "mdi:thermometer",
+                "unique_id": f"{self.device_id}_cpu_temp",
+                "state_class": "measurement",
+            }
+        if "mem_usage" not in self.ignore_sensors:
+            self.topics['memory_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state"
+            if "ram_usage" not in self.ignore_sensors:
+                dev_discovery["cmps"][f"{self.device_id}_memory_usage"] = {
                     "p": "sensor",
                     "name": "Memory Usage",
                     "unit_of_measurement": "%",
@@ -788,8 +799,9 @@ class LinuxSystemMonitor:
                     "icon": "mdi:memory",
                     "unique_id": f"{self.device_id}_memory_usage",
                     "state_class": "measurement"
-                },
-                f"{self.device_id}_swap_usage": {
+                }
+            if "swap_usage" not in self.ignore_sensors:
+                dev_discovery["cmps"][f"{self.device_id}_swap_usage"] = {
                     "p": "sensor",
                     "name": "Swap Usage",
                     "unit_of_measurement": "%",
@@ -800,10 +812,7 @@ class LinuxSystemMonitor:
                     "icon": "mdi:memory",
                     "unique_id": f"{self.device_id}_swap_usage",
                     "state_class": "measurement"
-                },
             }
-        }
-
         # Disk sensors
         self.topics['disk_smart'] = {}
         self.topics['disk_info'] = {}
@@ -818,159 +827,170 @@ class LinuxSystemMonitor:
             # display_name = self.get_disk_display_name(serial)
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
             #### Rewrite this part to device_discovery
-            self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
-            self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
-            self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
-            self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
-            self.topics['disk_status'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_status_{safe_serial}/state"
 
             if self.disk_serial_mapping.get(serial) == self.root_disk:
                 disk_name = "disk root"
             else:
                 disk_name= f"disk {serial[:8]}"
-            dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
-                "p": "binary_sensor",
-                "name": f"{disk_name} SMART health",
-                "state_topic": self.topics['disk_smart'][serial],
-                "json_attributes_topic": self.topics['disk_smart'][serial],
-                "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
-                "device_class": "problem",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
-                # "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} temperature",
-                "state_topic": self.topics['disk_smart'][serial],
-                "value_template": "{{ value_json.temperature }}",
-                "unit_of_measurement": "°C",
-                "device_class": "temperature",
-                "icon": "mdi:thermometer",
-                "unique_id": f"{self.device_id}_disk_temp_{safe_serial}",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} info",
-                "state_topic": self.topics['disk_info'][serial],
-                "json_attributes_topic": self.topics['disk_info'][serial],
-                "json_attributes_template": "{{ value_json | tojson }}",
-                "value_template": "{{ value_json.model_name }}",
-                # "device_class": "diagnostic",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
+            
+            if "disk_smart" not in self.ignore_sensors:
+                self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
+                dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
+                    "p": "binary_sensor",
+                    "name": f"{disk_name} SMART health",
+                    "state_topic": self.topics['disk_smart'][serial],
+                    "json_attributes_topic": self.topics['disk_smart'][serial],
+                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                    "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
+                    "device_class": "problem",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
+                    # "state_class": "measurement"
                 }
-            dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} write speed",
-                "state_topic": self.topics['disk_load'][serial],
-                "value_template": "{{ value_json.write_kbs | float(0) }}",
-                "unit_of_measurement": "kB/s",
-                "device_class": "data_rate",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_read_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} read speed",
-                "state_topic": self.topics['disk_load'][serial],
-                "value_template": "{{ value_json.read_kbs | float(0) }}",
-                "unit_of_measurement": "kB/s",
-                "device_class": "data_rate",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_util_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} utilization",
-                "state_topic": self.topics['disk_load'][serial],
-                "value_template": "{{ value_json.util | float(0) }}",
-                "unit_of_measurement": "%",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_usage_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} usage",
-                "state_topic": self.topics['disk_usage'][serial],
-                "json_attributes_topic": self.topics['disk_usage'][serial],
-                "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                "value_template": "{{ value_json.usage_percent }}",
-                "unit_of_measurement": "%",
-                "icon": "mdi:harddisk",
-                "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
-                "p": "sensor",
-                "name": f"{disk_name} status",
-                "state_topic": self.topics['disk_status'][serial],
-                "value_template": "{{ value_json.status }}",
-                "icon": "mdi:power",
-                "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
-            }
-
-        self.topics['net_stats'] = {}
-        for if_name in self.ifs_name:
-            safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
-            self.topics['net_stats'][if_name] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_net_stats_{safe_ifname}/state"
-            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
-                "p": "sensor",
-                "name": f"{if_name} Rx speed",
-                "state_topic": self.topics['net_stats'][if_name],
-                "value_template": "{{ value_json.rx_speed | int(0)}}", 
-                "unit_of_measurement": "B/s",
-                "device_class": "data_rate",
-                "icon": "mdi:download",
-                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
-                "state_class": "measurement"
+                dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} temperature",
+                    "state_topic": self.topics['disk_smart'][serial],
+                    "value_template": "{{ value_json.temperature }}",
+                    "unit_of_measurement": "°C",
+                    "device_class": "temperature",
+                    "icon": "mdi:thermometer",
+                    "unique_id": f"{self.device_id}_disk_temp_{safe_serial}",
+                    "state_class": "measurement"
                 }
-            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
-                "p": "sensor",
-                "name": f"{if_name} Tx speed",
-                "state_topic": self.topics['net_stats'][if_name],
-                "value_template": "{{ value_json.tx_speed | int(0)}}", 
-                "unit_of_measurement": "B/s",
-                "device_class": "data_rate",
-                "icon": "mdi:upload",
-                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
-                "p": "sensor",
-                "name": f"{if_name} Link Speed",
-                "state_topic": self.topics['net_stats'][if_name],
-                "value_template": "{{ value_json.link_speed | int(0)}}", 
-                "unit_of_measurement": "Mbit/s",
-                "suggested_display_precision": 0,
-                "device_class": "data_rate",
-                "icon": "mdi:speedometer",
-                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_link_speed",
-                "state_class": "measurement"
-            }
-            dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
-                "p": "sensor",
-                "name": f"{if_name} Duplex",
-                "state_topic": self.topics['net_stats'][if_name],
-                "value_template": "{{ value_json.duplex }}",
-                "icon": "mdi:network",
-                "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
-            }
+            if "disk_info" not in self.ignore_sensors:
+                self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
+                dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} info",
+                    "state_topic": self.topics['disk_info'][serial],
+                    "json_attributes_topic": self.topics['disk_info'][serial],
+                    "json_attributes_template": "{{ value_json | tojson }}",
+                    "value_template": "{{ value_json.model_name }}",
+                    # "device_class": "diagnostic",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
+                    }
+            if "disk_load" not in self.ignore_sensors:
+                self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
+                dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} write speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.write_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "device_class": "data_rate",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_write_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_read_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} read speed",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.read_kbs | float(0) }}",
+                    "unit_of_measurement": "kB/s",
+                    "device_class": "data_rate",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_read_{safe_serial}",
+                    "state_class": "measurement"
+                }
+                dev_discovery["cmps"][f"{self.device_id}_disk_util_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} utilization",
+                    "state_topic": self.topics['disk_load'][serial],
+                    "value_template": "{{ value_json.util | float(0) }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
+                    "state_class": "measurement"
+                }
+            if "disk_usage" not in self.ignore_sensors:
+                self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
+                dev_discovery["cmps"][f"{self.device_id}_disk_usage_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} usage",
+                    "state_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_topic": self.topics['disk_usage'][serial],
+                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                    "value_template": "{{ value_json.usage_percent }}",
+                    "unit_of_measurement": "%",
+                    "icon": "mdi:harddisk",
+                    "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
+                    "state_class": "measurement"
+                }
+            if "disk_status" not in self.ignore_sensors:
+                self.topics['disk_status'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_status_{safe_serial}/state"
+                dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
+                    "p": "sensor",
+                    "name": f"{disk_name} status",
+                    "state_topic": self.topics['disk_status'][serial],
+                    "value_template": "{{ value_json.status }}",
+                    "icon": "mdi:power",
+                    "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
+                }
+        if "net_stats" not in self.ignore_sensors:
+            self.topics['net_stats'] = {}
+            for if_name in self.ifs_name:
+                safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
+                self.topics['net_stats'][if_name] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_net_stats_{safe_ifname}/state"
+                if "net_rx" not in self.ignore_sensors :
+                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
+                        "p": "sensor",
+                        "name": f"{if_name} Rx speed",
+                        "state_topic": self.topics['net_stats'][if_name],
+                        "value_template": "{{ value_json.rx_speed | int(0)}}", 
+                        "unit_of_measurement": "B/s",
+                        "device_class": "data_rate",
+                        "icon": "mdi:download",
+                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
+                        "state_class": "measurement"
+                        }
+                if "net_tx" not in self.ignore_sensors:
+                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
+                        "p": "sensor",
+                        "name": f"{if_name} Tx speed",
+                        "state_topic": self.topics['net_stats'][if_name],
+                        "value_template": "{{ value_json.tx_speed | int(0)}}", 
+                        "unit_of_measurement": "B/s",
+                        "device_class": "data_rate",
+                        "icon": "mdi:upload",
+                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
+                        "state_class": "measurement"
+                    }
+                if "net_link_speed" not in self.ignore_sensors:
+                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
+                        "p": "sensor",
+                        "name": f"{if_name} Link Speed",
+                        "state_topic": self.topics['net_stats'][if_name],
+                        "value_template": "{{ value_json.link_speed | int(0)}}", 
+                        "unit_of_measurement": "Mbit/s",
+                        "suggested_display_precision": 0,
+                        "device_class": "data_rate",
+                        "icon": "mdi:speedometer",
+                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_link_speed",
+                        "state_class": "measurement"
+                    }
+                if "net_duplex" not in self.ignore_sensors:
+                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
+                        "p": "sensor",
+                        "name": f"{if_name} Duplex",
+                        "state_topic": self.topics['net_stats'][if_name],
+                        "value_template": "{{ value_json.duplex }}",
+                        "icon": "mdi:network",
+                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
+                    }
 
         self.mqtt_publish(f"{self.ha_discovery_prefix}/device/{self.device_id}/config", json.dumps(dev_discovery), True)
     
     def publish_onetime_sensors(self):
         """Publish one-time sensors (uptime)"""
         print("Publishing one-time sensors...")
-        with open('/proc/uptime', 'r') as f:
-            uptime_seconds = float(f.read().split()[0])
-        # uptime_hours = self.get_uptime_hours()
-        self.mqtt_publish(self.topics['uptime'], str(uptime_seconds), True)
+        if "last_boot" not in self.ignore_sensors:
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.read().split()[0])
+            # uptime_hours = self.get_uptime_hours()
+            self.mqtt_publish(self.topics['uptime'], str(uptime_seconds), True)
     
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
@@ -980,11 +1000,11 @@ class LinuxSystemMonitor:
         disk_serials = self.get_disk_list_by_serial()
         
         for serial in disk_serials:
-            if serial in self.topics['disk_smart']:
+            if (serial in self.topics['disk_smart']) and ("disk_smart" not in self.ignore_sensors):
                 smart_data = self.get_disk_smart(serial)
                 self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
             
-            if serial in self.topics['disk_status']:
+            if (serial in self.topics['disk_status']) and ("disk_info" not in self.ignore_sensors):
                 status_data = self.get_disk_status(serial)
                 self.mqtt_publish(self.topics['disk_status'][serial], json.dumps(status_data))
     def publish_disk_info(self):
@@ -1067,12 +1087,15 @@ class LinuxSystemMonitor:
         self.publish_network_sensors()
         
         # CPU metrics
-        cpu_temp_data = self.get_cpu_temperature()
-        self.mqtt_publish(self.topics['cpu_usage'], json.dumps(cpu_usage))
-        self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
+        if "cpu_usage" not in self.ignore_sensors:
+            self.mqtt_publish(self.topics['cpu_usage'], json.dumps(cpu_usage))
+        if "cpu_temp" not in self.ignore_sensors:
+            cpu_temp_data = self.get_cpu_temperature()
+            self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
         
         # System metrics
-        self.mqtt_publish(self.topics['memory_usage'], json.dumps( self.get_memory_usage()))
+        if "mem_usage" not in self.ignore_sensors:
+            self.mqtt_publish(self.topics['memory_usage'], json.dumps( self.get_memory_usage()))
         
         # Disk metrics - update mapping first
         disk_serials = self.get_disk_list_by_serial()
