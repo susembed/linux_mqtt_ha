@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # Configuration script for Linux MQTT Home Assistant Monitor (Python version)
-# This script helps you configure and install the Python monitoring script
+# This script helps you configure, install, and update the Python monitoring script
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/etc/linux_mqtt_ha"
 SERVICE_NAME="linux-mqtt-ha"
+REPO_URL="https://github.com/susembed/linux_mqtt_ha.git"
 
 echo "Linux MQTT Home Assistant Monitor (Python) - Configuration Script"
 echo "================================================================="
@@ -33,7 +34,7 @@ install_dependencies() {
     apt-get update
     
     # Install required packages
-    apt-get install smartmontools lm-sensors sysstat
+    apt-get install smartmontools lm-sensors sysstat hdparm python3-dotenv
     
     # Install Python MQTT library
     # if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
@@ -50,20 +51,20 @@ install_files() {
     echo "Installing files to $INSTALL_DIR..."
     
     # Create installation directory
-    mkdir -p "$INSTALL_DIR"
+    sudo mkdir -p "$INSTALL_DIR"
     
     # Copy Python script
     cp "$SCRIPT_DIR/mqtt_linux_monitoring.py" "$INSTALL_DIR/"
     if [ -f "$INSTALL_DIR/.env" ]; then
         echo ".env already exists, skipping copy"
     else
-        cp "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
+        sudo cp "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
     fi
-    chmod +x "$INSTALL_DIR/mqtt_linux_monitoring.py"
+    sudo chmod +x "$INSTALL_DIR/mqtt_linux_monitoring.py"
     
     # Copy requirements.txt if it exists
-    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-        cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+    if [ -f "$INSTALL_DIR/requirements.txt" ]; then
+        sudo cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
     fi
     
     echo "Files installed successfully"
@@ -74,10 +75,10 @@ configure_service() {
     echo "Configuring systemd service..."
     
     # Copy service file
-    cp "$SCRIPT_DIR/linux-mqtt-ha.service" "/etc/systemd/system/"
+    sudo cp "$SCRIPT_DIR/linux-mqtt-ha.service" "/etc/systemd/system/"
     
     # Reload systemd
-    systemctl daemon-reload
+    sudo systemctl daemon-reload
     
     echo "Service configured successfully"
 }
@@ -91,7 +92,7 @@ configure_mqtt() {
     read -p "Would you like to edit the configuration now? (y/N): " edit_config
     
     if [[ $edit_config =~ ^[Yy]$ ]]; then
-        ${EDITOR:-nano} "$INSTALL_DIR/.env"
+        sudo ${EDITOR:-nano} "$INSTALL_DIR/.env"
     fi
 }
 
@@ -110,13 +111,13 @@ test_script() {
         sleep 2
         
         cd "$INSTALL_DIR"
-        python3 mqtt_linux_monitoring.py --dry-run &
+        sudo python3 mqtt_linux_monitoring.py --dry-run &
         TEST_PID=$!
         
         # Let it run for 15 seconds
         sleep 15
-        kill $TEST_PID 2>/dev/null || true
-        wait $TEST_PID 2>/dev/null || true
+        sudo kill $TEST_PID 2>/dev/null || true
+        sudo wait $TEST_PID 2>/dev/null || true
         
         echo ""
         echo "Test completed"
@@ -140,23 +141,23 @@ manage_service() {
     
     case $service_option in
         1)
-            systemctl enable "$SERVICE_NAME"
-            systemctl start "$SERVICE_NAME"
+            sudo systemctl enable "$SERVICE_NAME"
+            sudo systemctl start "$SERVICE_NAME"
             echo "Service enabled and started"
             ;;
         2)
-            systemctl start "$SERVICE_NAME"
+            sudo systemctl start "$SERVICE_NAME"
             echo "Service started"
             ;;
         3)
-            systemctl stop "$SERVICE_NAME"
+            sudo systemctl stop "$SERVICE_NAME"
             echo "Service stopped"
             ;;
         4)
-            systemctl status "$SERVICE_NAME"
+            sudo systemctl status "$SERVICE_NAME"
             ;;
         5)
-            journalctl -u "$SERVICE_NAME" -f
+            sudo journalctl -u "$SERVICE_NAME" -f
             ;;
         6)
             echo "Skipping service management"
@@ -187,14 +188,78 @@ show_usage() {
     echo ""
 }
 
-# Main installation flow
-main() {
-    check_root
+# Function to update the script
+update_script() {
+    echo "Updating Linux MQTT monitoring script..."
+    echo "========================================"
+    echo "Pulling latest changes from repository..."
+    git -C "$SCRIPT_DIR" pull "$REPO_URL" || {
+        echo "Error: Failed to update from repository"
+        exit 1
+    }
+    echo "Elevating privileges to copy updated files..."
+    sudo echo "Elevated to root"
+    # Check if installation directory exists
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo "Error: Installation directory $INSTALL_DIR does not exist"
+        echo "Please run the full installation first"
+        exit 1
+    fi
     
+    # Check if Python script exists in source
+    if [ ! -f "$SCRIPT_DIR/mqtt_linux_monitoring.py" ]; then
+        echo "Error: Source script $SCRIPT_DIR/mqtt_linux_monitoring.py not found"
+        exit 1
+    fi
+    
+    echo "Copying updated Python script to $INSTALL_DIR..."
+    sudo cp "$SCRIPT_DIR/mqtt_linux_monitoring.py" "$INSTALL_DIR/"
+    sudo chmod +x "$INSTALL_DIR/mqtt_linux_monitoring.py"
+    
+    # Copy requirements.txt if it exists
+    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+        sudo cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+        echo "Updated requirements.txt"
+    fi
+    
+    echo "Restarting service..."
+    if  sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+        sudo systemctl restart "$SERVICE_NAME"
+        echo "Service restarted successfully"
+    else
+        echo "Service was not running, starting it now..."
+        sudo systemctl start "$SERVICE_NAME"
+        echo "Service started successfully"
+    fi
+    
+    echo ""
+    echo "Update completed successfully!"
+    sudo systemctl status "$SERVICE_NAME" --no-pager
+}
+
+# Function to show script usage
+show_script_usage() {
+    echo "Usage: $0 [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  install    Run the full installation process (default)"
+    echo "  update     Update the Python script and restart service"
+    echo "  help       Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  sudo $0                # Full installation"
+    echo "  sudo $0 install        # Full installation"
+    echo "  sudo $0 update         # Update script only"
+    echo ""
+}
+
+# Main installation flow
+main_install() {
     echo "This script will install the Linux MQTT monitoring script (Python version)"
     echo "Installation directory: $INSTALL_DIR"
     echo ""
-    
+    echo "Elevating privileges to copy updated files..."
+    sudo echo "Elevated to root"
     read -p "Continue with installation? (Y/n): " continue_install
     
     if [[ $continue_install =~ ^[Nn]$ ]]; then
@@ -213,6 +278,29 @@ main() {
     echo ""
     echo "Installation completed successfully!"
     echo "The Python monitoring script is now installed and ready to use."
+}
+
+# Main function with command handling
+main() {
+    # check_root
+    
+    case "${1:-install}" in
+        install)
+            main_install
+            ;;
+        update)
+            update_script
+            ;;
+        help|--help|-h)
+            show_script_usage
+            ;;
+        *)
+            echo "Error: Unknown command '$1'"
+            echo ""
+            show_script_usage
+            exit 1
+            ;;
+    esac
 }
 
 # Run main function
