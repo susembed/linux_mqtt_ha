@@ -57,7 +57,7 @@ install_files() {
     if [ -f "$SCRIPT_DIR/.env" ]; then
         echo ".env already exists, skipping copy"
     else
-        cp "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
+        cp --udpate "$SCRIPT_DIR/example.env" "$INSTALL_DIR/.env"
     fi
     chmod +x "$INSTALL_DIR/mqtt_linux_monitoring.py"
     
