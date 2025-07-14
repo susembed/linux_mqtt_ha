@@ -83,7 +83,7 @@ class LinuxSystemMonitor:
             return True
             
         missing_deps = []
-        required_commands = ["smartctl", "sensors", "iostat"]
+        required_commands = ["smartctl", "sensors", "iostat", "hdparm"]
         
         for cmd in required_commands:
             if subprocess.run(["which", cmd], capture_output=True).returncode != 0:
@@ -93,6 +93,8 @@ class LinuxSystemMonitor:
                     missing_deps.append("lm-sensors")
                 elif cmd == "iostat":
                     missing_deps.append("sysstat")
+                elif cmd == "hdparm":
+                    missing_deps.append("hdparm")
         
         if missing_deps:
             print(f"Missing dependencies: {', '.join(missing_deps)}")
@@ -191,6 +193,19 @@ class LinuxSystemMonitor:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             return result.stdout.strip() if result.returncode == 0 else ""
         except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return ""
+    def run_command_accept_error(self, cmd: List[str], timeout: int = 30) -> str:
+        """Run system command and return output"""
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            if result.stdout.strip():
+                return result.stdout.strip()
+            elif result.stderr.strip():
+                return result.stderr.strip()
+            else:
+                return ""
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+            print(f"Command exception: {e}")
             return ""
     
     def get_iostat_data(self) -> Tuple[float, Dict[str, Dict[str, float]]]:
@@ -440,6 +455,26 @@ class LinuxSystemMonitor:
                         except ValueError:
                             continue
         return 0.0
+    def get_disk_status(self, disk_or_serial: str) -> Dict:
+        """Get disk power status using hdparm (accepts device path or serial)"""
+        # Determine if input is a serial or device path
+        if disk_or_serial.startswith('/dev/'):
+            disk_path = disk_or_serial
+        else:
+            disk_path = self.disk_serial_mapping.get(disk_or_serial, "")
+            if not disk_path:
+                return {"status": "unknown", "error": "Device not found"}
+        
+        output = self.run_command(["hdparm", "-C", disk_path])
+        if output:
+            for line in output.split('\n'):
+                if "drive state is:" in line:
+                    # Extract status after "drive state is:"
+                    status = line.split("drive state is:")[1].strip()
+                    return {"status": status}
+        
+        return {"status": "unknown", "error": "Failed to get status"}
+
     def get_disk_usage(self, block_path: str) -> Dict:
         """Get disk usage statistics using lsblk with JSON output (accepts device path)"""
         # Use lsblk with JSON output
@@ -506,21 +541,62 @@ class LinuxSystemMonitor:
                 return {}
         
         # Use smartctl with JSON output for comprehensive SMART data
-        output = self.run_command(["smartctl", "-A", "-H", "-j", disk_path])
+        output = self.run_command_accept_error(["smartctl", "-A", "-H", "-j", disk_path])
         if not output:
-            return {}
+            return {
+                "smart_passed": 0,
+                "temperature": 0,
+                "attrs": {
+                    "error": "No smartctl output"
+                }
+            }
         
         try:
             data = json.loads(output)
+            
+            # Check for smartctl exit status and messages
+            smartctl_info = data.get("smartctl", {})
+            exit_status = smartctl_info.get("exit_status", 0)
+            messages = smartctl_info.get("messages", [])
+            
+            # Check for known error conditions
+            error_conditions = []
+            for message in messages:
+                msg_string = message.get("string", "")
+                if "Unknown USB bridge" in msg_string:
+                    output = self.run_command_accept_error(["smartctl", "-A", "-H", "-d", "sat", "-j", disk_path])
+                    if output:
+                        data = json.loads(output)
+                        exit_status = data.get("smartctl", {}).get("exit_status", 0)
+                        if exit_status == 0:
+                            break
+                        # If we got here, it means the USB bridge is supported
+                    error_conditions.append("USB bridge not supported")
+                    break
+                elif "SMART support is:" in msg_string and "Unavailable" in msg_string:
+                    error_conditions.append("SMART not supported")
+                elif message.get("severity") == "error":
+                    error_conditions.append(msg_string)
+            
+            # If there are critical errors, return limited data
+            if exit_status != 0 and error_conditions:
+                return {
+                    "smart_passed": 0,
+                    "temperature": 0,
+                    "attrs": {
+                        "error": "; ".join(error_conditions),
+                        "exit_status": exit_status,
+                        "supported": False
+                    }
+                }
 
             # Extract SMART attributes
             smart_attrs = {
                 "smart_passed": 1 if data.get("smart_status", {}).get("passed", False) else 0,
                 "temperature": data.get("temperature", {}).get("current", 0),
-                "power_on_hours": data.get("power_on_time", {}).get("hours", 0),
-                "power_cycle_count": data.get("power_cycle_count", 0),
-                "attrs":{}
+                "attrs": {}
             }
+            
             # Parse SMART attributes table
             smart_table = data.get("ata_smart_attributes", {}).get("table", [])
             for attr in smart_table:
@@ -533,9 +609,12 @@ class LinuxSystemMonitor:
                     key = f"attribute_{attr_id}"
                 else:
                     key = attr_name.lower()
-                
-                # Store both normalized value and raw value
                 smart_attrs["attrs"][key] = attr_value
+            
+            # Add support status to attributes
+            smart_attrs["attrs"]["supported"] = True
+            # if messages:
+            #     smart_attrs["attrs"]["messages"] = [msg.get("string", "") for msg in messages]
             
             return smart_attrs
             
@@ -543,19 +622,47 @@ class LinuxSystemMonitor:
             print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
             
             return {
+                "smart_passed": 0,
+                "temperature": 0,
+                "attrs": {
+                    "error": f"JSON parse error: {str(e)}",
+                    "supported": False
+                }
             }
 
     def get_disk_info(self, device_path: str) -> Dict:
         """Get disk info data using JSON output from smartctl (accepts device path)"""
 
         # Use smartctl with JSON output for comprehensive SMART data
-        output = self.run_command(["smartctl", "-i", "-j", device_path])
+        output = self.run_command_accept_error(["smartctl", "-i", "-j", device_path])
         if not output:
             return {}
         
         try:
             data = json.loads(output)
             
+            # Check for smartctl exit status and messages
+            smartctl_info = data.get("smartctl", {})
+            exit_status = smartctl_info.get("exit_status", 0)
+            messages = smartctl_info.get("messages", [])
+            
+            for message in messages:
+                msg_string = message.get("string", "")
+                if "Unknown USB bridge" in msg_string:
+                    output = self.run_command_accept_error(["smartctl", "-i", "-d", "sat", "-j", device_path])
+                    if output:
+                        data = json.loads(output)
+                        exit_status = data.get("smartctl", {}).get("exit_status", 0)
+                        if exit_status == 0:
+                            break
+                        # If we got here, it means the USB bridge is supported
+                    break
+            
+            # If there are critical errors, return limited data
+            if exit_status != 0 :
+                return {
+                    "model_name": "Unknown",
+                }
             # Extract device info
             info = {
                 "device_name": data.get("device", {}).get("name", device_path),
@@ -631,7 +738,7 @@ class LinuxSystemMonitor:
             },
             "o": {
                 "name": "linux_mqtt_ha",
-                "sw": "1.0",
+                "sw": "1.1",
                 "url": "https://github.com/susembed/linux_mqtt_ha"
             },
             "cmps": {
@@ -640,7 +747,7 @@ class LinuxSystemMonitor:
                     "name": "Last Boot",
                     "icon":"mdi:clock",
                     "state_topic": f"{self.topics['uptime']}",
-                    "value_template":"{{now() - timedelta( seconds = (value |float(0)))}}",
+                    "value_template":"{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
                     "device_class":"timestamp",
                     "unique_id": f"{self.device_id}_last_boot",
                 },
@@ -702,6 +809,7 @@ class LinuxSystemMonitor:
         self.topics['disk_info'] = {}
         self.topics['disk_load'] = {}
         self.topics['disk_usage'] = {}
+        self.topics['disk_status'] = {}
         
         # Get initial disk mapping
         disk_serials = self.get_disk_list_by_serial()
@@ -714,6 +822,7 @@ class LinuxSystemMonitor:
             self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
             self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
             self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
+            self.topics['disk_status'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_status_{safe_serial}/state"
 
             if self.disk_serial_mapping.get(serial) == self.root_disk:
                 disk_name = "disk root"
@@ -797,6 +906,14 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
                 "state_class": "measurement"
             }
+            dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
+                "p": "sensor",
+                "name": f"{disk_name} status",
+                "state_topic": self.topics['disk_status'][serial],
+                "value_template": "{{ value_json.status }}",
+                "icon": "mdi:power",
+                "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
+            }
 
         self.topics['net_stats'] = {}
         for if_name in self.ifs_name:
@@ -857,7 +974,7 @@ class LinuxSystemMonitor:
     
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
-        print("Publishing slow interval sensors (SMART data)...")
+        # print("Publishing slow interval sensors (SMART data)...")
         
         # Update disk mapping and get current serials
         disk_serials = self.get_disk_list_by_serial()
@@ -866,7 +983,11 @@ class LinuxSystemMonitor:
             if serial in self.topics['disk_smart']:
                 smart_data = self.get_disk_smart(serial)
                 self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
-    def publish_disk_info_and_status(self):
+            
+            if serial in self.topics['disk_status']:
+                status_data = self.get_disk_status(serial)
+                self.mqtt_publish(self.topics['disk_status'][serial], json.dumps(status_data))
+    def publish_disk_info(self):
         """Publish disk info and status sensors"""
         print("Publishing disk info and status sensors...")
         
@@ -1088,7 +1209,7 @@ class LinuxSystemMonitor:
                 print("Waiting for Home Assistant to process discovery messages...")
                 time.sleep(5)  # 5 second delay
             
-            self.publish_disk_info_and_status()
+            self.publish_disk_info()
             print("Updated disk entities discovery and disk info and status values")
             for serial, path in self.disk_serial_mapping.items():
                 print(f"  {serial}: {path} ({self.disk_info_cache.get(serial, {}).get('model', 'Unknown')})")
