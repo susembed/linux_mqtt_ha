@@ -724,6 +724,7 @@ class LinuxSystemMonitor:
         return self.run_command(['uname', '-o'])
     def get_hardware_info(self) -> str:
         """Get hardware information using lshw"""
+        cpu_name = "Unknown CPU"
         with open('/proc/cpuinfo') as f:
             for line in f:
                 if 'model name' in line:
