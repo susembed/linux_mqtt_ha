@@ -1190,17 +1190,17 @@ class LinuxSystemMonitor:
                 model = device.get("model", "")
                 
                 # Only include physical disks with serials
-                if name and serial and tran in ["sata", "nvme", "usb", "scsi"]:
-                    device_path = f"/dev/{name}"
-                    # Verify device exists and matches our disk pattern
-                    if os.path.exists(device_path) and re.match(r'^/dev/(sd|nvme|hd|mmc)', device_path):
-                        new_mapping[serial] = device_path
-                        new_info_cache[serial] = {
-                            "name": name,
-                            "model": model or "Unknown",
-                            "size": size or "Unknown",
-                            "transport": tran
-                        }
+                # if name and serial and tran in ["sata", "nvme", "usb", "scsi"]:
+                device_path = f"/dev/{name}"
+                # Verify device exists and matches our disk pattern
+                if os.path.exists(device_path) and re.match(r'^/dev/(sd|nvme|hd|mmc)', device_path):
+                    new_mapping[serial] = device_path
+                    new_info_cache[serial] = {
+                        "name": name,
+                        "model": model or "Unknown",
+                        "size": size or "Unknown",
+                        "transport": tran
+                    }
             
             # Update class variables
             old_serials = set(self.disk_serial_mapping.keys())
