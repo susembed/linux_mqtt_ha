@@ -254,9 +254,24 @@ class LinuxSystemMonitor:
         if output:
             try:
                 data = json.loads(output)
-                
-                # Look for coretemp or similar CPU temperature sensor
+                # Look for coretemp, cpu thermal, or similar CPU temperature sensor
                 for sensor_name, sensor_data in data.items():
+                    if ("coretemp" in sensor_name.lower() or 
+                        "cpu_thermal" in sensor_name.lower()):
+                        
+                        # Handle virtual thermal sensors (e.g., cpu_thermal-virtual-0)
+                        if "thermal" in sensor_name.lower() and "virtual" in sensor_name.lower():
+                            # Look for temp1 data
+                            if "temp1" in sensor_data and isinstance(sensor_data["temp1"], dict):
+                                temp_value = sensor_data["temp1"].get("temp1_input", 0.0)
+                                return {
+                                    "temperature": round(temp_value, 1),
+                                    "attrs": {
+                                        "sensor": sensor_name,
+                                        "source": "virtual_thermal"
+                                    }
+                                }
+                        
                     if "coretemp" in sensor_name.lower() or "cpu" in sensor_name.lower():
                         # Collect core temperatures
                         core_temps = {}
