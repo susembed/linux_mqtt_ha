@@ -7,7 +7,9 @@ Publishes to MQTT broker with Home Assistant autodiscovery
 """
 # TODO:
 # - Fix paho-mqtt client connection issues
+# - Auto dectect unsported SMART before create sensors in discovery 
 # - combine payload for multiple sensors into one MQTT message
+# - Add CPU frequency monitoring
 # - Add docker container monitoring
 import json
 import time
@@ -38,7 +40,7 @@ class LinuxSystemMonitor:
         self.mqtt_pass = os.getenv("MQTT_PASS", "")
         
         # Parse network interfaces from comma-separated string
-        interfaces_str = os.getenv("NETWORK_INTERFACES", "lan")
+        interfaces_str = os.getenv("NETWORK_INTERFACES", "eth0")
         self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
 
         self.ignore_sensors = [sensor.strip() for sensor in os.getenv("IGNORE_SENSORS", "").split(",") if sensor.strip()]
@@ -49,7 +51,7 @@ class LinuxSystemMonitor:
         
         # Intervals (in seconds) - Load from environment variables
         self.fast_interval = int(os.getenv("FAST_INTERVAL", "10"))
-        self.slow_interval = int(os.getenv("SLOW_INTERVAL", "3600"))
+        self.slow_interval = int(os.getenv("SLOW_INTERVAL", "30"))  # Default to 30 seconds
         
         # Home Assistant discovery prefix
         self.ha_discovery_prefix = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
@@ -842,44 +844,45 @@ class LinuxSystemMonitor:
             else:
                 disk_name= f"disk {serial[:8]}"
             
-            if "disk_smart" not in self.ignore_sensors:
-                self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
-                dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
-                    "p": "binary_sensor",
-                    "name": f"{disk_name} SMART health",
-                    "state_topic": self.topics['disk_smart'][serial],
-                    "json_attributes_topic": self.topics['disk_smart'][serial],
-                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                    "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
-                    "device_class": "problem",
-                    "icon": "mdi:harddisk",
-                    "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
-                    # "state_class": "measurement"
-                }
-                dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
-                    "p": "sensor",
-                    "name": f"{disk_name} temperature",
-                    "state_topic": self.topics['disk_smart'][serial],
-                    "value_template": "{{ value_json.temperature }}",
-                    "unit_of_measurement": "°C",
-                    "device_class": "temperature",
-                    "icon": "mdi:thermometer",
-                    "unique_id": f"{self.device_id}_disk_temp_{safe_serial}",
-                    "state_class": "measurement"
-                }
-            if "disk_info" not in self.ignore_sensors:
-                self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
-                dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
-                    "p": "sensor",
-                    "name": f"{disk_name} info",
-                    "state_topic": self.topics['disk_info'][serial],
-                    "json_attributes_topic": self.topics['disk_info'][serial],
-                    "json_attributes_template": "{{ value_json | tojson }}",
-                    "value_template": "{{ value_json.model_name }}",
-                    # "device_class": "diagnostic",
-                    "icon": "mdi:harddisk",
-                    "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
+            if serial not in self.ignore_disks_for_smart:
+                if "disk_smart" not in self.ignore_sensors:
+                    self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
+                    dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
+                        "p": "binary_sensor",
+                        "name": f"{disk_name} SMART health",
+                        "state_topic": self.topics['disk_smart'][serial],
+                        "json_attributes_topic": self.topics['disk_smart'][serial],
+                        "json_attributes_template": "{{ value_json.attrs | tojson }}",
+                        "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
+                        "device_class": "problem",
+                        "icon": "mdi:harddisk",
+                        "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
+                        # "state_class": "measurement"
                     }
+                    dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
+                        "p": "sensor",
+                        "name": f"{disk_name} temperature",
+                        "state_topic": self.topics['disk_smart'][serial],
+                        "value_template": "{{ value_json.temperature }}",
+                        "unit_of_measurement": "°C",
+                        "device_class": "temperature",
+                        "icon": "mdi:thermometer",
+                        "unique_id": f"{self.device_id}_disk_temp_{safe_serial}",
+                        "state_class": "measurement"
+                    }
+                if "disk_info" not in self.ignore_sensors:
+                    self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
+                    dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
+                        "p": "sensor",
+                        "name": f"{disk_name} info",
+                        "state_topic": self.topics['disk_info'][serial],
+                        "json_attributes_topic": self.topics['disk_info'][serial],
+                        "json_attributes_template": "{{ value_json | tojson }}",
+                        "value_template": "{{ value_json.model_name }}",
+                        # "device_class": "diagnostic",
+                        "icon": "mdi:harddisk",
+                        "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
+                        }
             if "disk_load" not in self.ignore_sensors:
                 self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
                 dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
@@ -1009,13 +1012,14 @@ class LinuxSystemMonitor:
         disk_serials = self.get_disk_list_by_serial()
         
         for serial in disk_serials:
-            if (serial in self.topics['disk_smart']) and ("disk_smart" not in self.ignore_sensors):
-                smart_data = self.get_disk_smart(serial)
-                self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
-            
-            if (serial in self.topics['disk_status']) and ("disk_info" not in self.ignore_sensors):
-                status_data = self.get_disk_status(serial)
-                self.mqtt_publish(self.topics['disk_status'][serial], json.dumps(status_data))
+            if serial not in self.ignore_disks_for_smart:
+                if (serial in self.topics['disk_smart']) and ("disk_smart" not in self.ignore_sensors):
+                    smart_data = self.get_disk_smart(serial)
+                    self.mqtt_publish(self.topics['disk_smart'][serial], json.dumps(smart_data))
+                
+                if (serial in self.topics['disk_status']) and ("disk_info" not in self.ignore_sensors):
+                    status_data = self.get_disk_status(serial)
+                    self.mqtt_publish(self.topics['disk_status'][serial], json.dumps(status_data))
     def publish_disk_info(self):
         """Publish disk info and status sensors"""
         print("Publishing disk info and status sensors...")
