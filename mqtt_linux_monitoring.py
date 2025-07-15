@@ -432,13 +432,6 @@ class LinuxSystemMonitor:
                 return int(uptime_seconds / 3600)
         except (FileNotFoundError, ValueError, IndexError):
             return 0
-    def get_disk_list(self) -> List[str]:
-        """Get list of physical disks (legacy method - returns device paths)"""
-        # This method is kept for backward compatibility
-        # but internally uses the serial-based mapping
-        serials = self.get_disk_list_by_serial()
-        return [self.disk_serial_mapping[serial] for serial in serials if serial in self.disk_serial_mapping]
-
     def get_disk_temperature(self, disk_or_serial: str) -> float:
         """Get disk temperature using smartctl (accepts device path or serial)"""
         # Determine if input is a serial or device path
@@ -1200,7 +1193,7 @@ class LinuxSystemMonitor:
                 if name and serial and tran in ["sata", "nvme", "usb", "scsi"]:
                     device_path = f"/dev/{name}"
                     # Verify device exists and matches our disk pattern
-                    if os.path.exists(device_path) and re.match(r'^/dev/(sd|nvme|hd)', device_path):
+                    if os.path.exists(device_path) and re.match(r'^/dev/(sd|nvme|hd|mmc)', device_path):
                         new_mapping[serial] = device_path
                         new_info_cache[serial] = {
                             "name": name,
