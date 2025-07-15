@@ -6,10 +6,8 @@ Monitors: CPU usage/temp, System load, Memory, Disk SMART, Disk I/O
 Publishes to MQTT broker with Home Assistant autodiscovery
 """
 # TODO:
-# - Get OS name from /etc/os-release
-# - Add disk temperature sensors
 # - Fix paho-mqtt client connection issues
-# - Add disk status: active, idle, inactive
+# - combine payload for multiple sensors into one MQTT message
 # - Add docker container monitoring
 import json
 import time
@@ -20,7 +18,7 @@ import sys
 import os
 import re
 from typing import Dict, List, Tuple
-import paho.mqtt.client as mqtt
+# import paho.mqtt.client as mqtt
 
 # Load environment variables from .env file
 try:
@@ -83,12 +81,14 @@ class LinuxSystemMonitor:
         
     def check_dependencies(self) -> bool:
         """Check if required system tools are available"""
-        if self.dry_run:
-            print("DRY RUN MODE: Skipping dependency checks")
-            return True
+        # if self.dry_run:
+        #     print("DRY RUN MODE: Skipping dependency checks")
+        #     return True
             
         missing_deps = []
         required_commands = ["smartctl", "sensors", "iostat", "hdparm"]
+        if "disk_smart" in self.ignore_sensors:
+            required_commands.remove("smartctl")
         
         for cmd in required_commands:
             if subprocess.run(["which", cmd], capture_output=True).returncode != 0:
