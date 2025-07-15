@@ -1081,6 +1081,13 @@ class LinuxSystemMonitor:
         """Publish fast interval sensors"""
         # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
         
+        if "cpu_temp" not in self.ignore_sensors:
+            cpu_temp_data = self.get_cpu_temperature()
+            self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
+        
+        # System metrics
+        if "mem_usage" not in self.ignore_sensors:
+            self.mqtt_publish(self.topics['memory_usage'], json.dumps( self.get_memory_usage()))
         # Prepare network interface sensors before collecting iostat data
         for ifname  in self.ifs_name:
             try:
@@ -1102,13 +1109,6 @@ class LinuxSystemMonitor:
         # CPU metrics
         if "cpu_usage" not in self.ignore_sensors:
             self.mqtt_publish(self.topics['cpu_usage'], json.dumps(cpu_usage))
-        if "cpu_temp" not in self.ignore_sensors:
-            cpu_temp_data = self.get_cpu_temperature()
-            self.mqtt_publish(self.topics['cpu_temp'], json.dumps(cpu_temp_data))
-        
-        # System metrics
-        if "mem_usage" not in self.ignore_sensors:
-            self.mqtt_publish(self.topics['memory_usage'], json.dumps( self.get_memory_usage()))
         
         # Disk metrics - update mapping first
         disk_serials = self.get_disk_list_by_serial()
@@ -1150,7 +1150,9 @@ class LinuxSystemMonitor:
 
         # Get OS's root partition block device
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
-        self.root_disk = re.sub(r'\d+$', '', self.root_block)  # Remove partition number
+        # Remove partition number - handle different storage device naming conventions
+        # sda1 -> sda, mmcblk0p1 -> mmcblk0, nvme0n1p1 -> nvme0n1
+        self.root_disk = re.sub(r'(p\d+|\d+)$', '', self.root_block)
         print(f"Root disk: {self.root_disk}")
         # Update disk mapping, this also update discovery
         self.update_disk_mapping()
