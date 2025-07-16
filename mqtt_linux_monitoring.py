@@ -68,6 +68,7 @@ class LinuxSystemMonitor:
         self.fast_interval = int(get_env_var('FAST_INTERVAL', '10'))
         self.slow_interval = int(get_env_var('SLOW_INTERVAL', '30'))
         self.ha_discovery_prefix = get_env_var('HA_DISCOVERY_PREFIX', 'homeassistant')
+        
 
         with open('/etc/hostname', 'r') as f:
             self.hostname = f.read().strip()
@@ -132,28 +133,63 @@ class LinuxSystemMonitor:
         
         if self.mqtt_port == 8883:
             self.tls = {'cert_reqs': ssl.CERT_REQUIRED, 'tls_version': ssl.PROTOCOL_TLS}
+    
+    # def test_mqtt_connectivity(self):
+    #     """Test connectivity to MQTT broker"""
+    #     import socket
         
+    #     try:
+    #         # Test basic network connectivity
+    #         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #         sock.settimeout(5.0)  # 5 second timeout
+    #         result = sock.connect_ex((self.mqtt_broker, self.mqtt_port))
+    #         sock.close()
+            
+    #         if result == 0:
+    #             return True
+    #         else:
+    #             print(f"Warning: Cannot connect to MQTT broker {self.mqtt_broker}:{self.mqtt_port}")
+    #             return False
+    #     except Exception as e:
+    #         print(f"Warning: MQTT connectivity test failed: {e}")
+    #         return False
+
     def mqtt_publish(self, topic: str, payload: str, retain: bool = False):
         """Publish MQTT message"""
-        cmd = [
-            "mosquitto_pub",
-            "-h", str(self.mqtt_broker),
-            "-p", str(self.mqtt_port),
-            "-u", str(self.mqtt_user),
-            "-P", str(self.mqtt_pass),
-            "-t", str(topic),
-            "-m", str(payload)
-        ]
-        # print(f"Running command: {' '.join(cmd)}")
-        if retain:
-            cmd.append("-r")
+        # cmd = [
+        #     "mosquitto_pub",
+        #     "-h", str(self.mqtt_broker),
+        #     "-p", str(self.mqtt_port),
+        #     "-u", str(self.mqtt_user),
+        #     "-P", str(self.mqtt_pass),
+        #     "-t", str(topic),
+        #     "-m", str(payload)
+        # ]
+        # # print(f"Running command: {' '.join(cmd)}")
+        # if retain:
+        #     cmd.append("-r")
         if self.dry_run:
             retain_flag = " [RETAINED]" if retain else ""
             print(f"[DRY RUN]{retain_flag} Topic: {topic}")
             print(f"[DRY RUN]{retain_flag} Payload: {payload}")
             print("---")
             return
-        self.run_command(cmd)
+        
+        try:
+            publish.single(
+                topic=topic,
+                payload=payload,
+                hostname=self.mqtt_broker,
+                port=self.mqtt_port,
+                auth=self.auth,
+                tls=self.tls,
+                client_id=self.mqtt_client_id,
+                retain=retain,
+                keepalive=60
+            )
+        except Exception as e:
+            print(f"Failed to send MQTT message: {e}")
+        # self.run_command(cmd)
         # if self.mqtt_client and getattr(self, 'mqtt_connected', False):
         #     # Add debugging output
         #     print(f"Publishing to topic: {topic}")
@@ -1103,9 +1139,7 @@ class LinuxSystemMonitor:
     def cleanup(self, signum=None, frame=None):
         """Handle script termination"""
         print("Cleaning up...")
-        if self.mqtt_client:
-            self.mqtt_client.loop_stop()
-            self.mqtt_client.disconnect()
+
         sys.exit(0)
     
     def run(self, dry_run: bool = False):
@@ -1116,8 +1150,12 @@ class LinuxSystemMonitor:
         print(f"MQTT Broker: {self.mqtt_broker}:{self.mqtt_port}")
         
         # Setup MQTT connection
-        # self.setup_mqtt()
-
+        self.setup_mqtt()
+        
+        # Test MQTT connectivity before proceeding
+        # if not self.dry_run and not self.test_mqtt_connectivity():
+        #     print("WARNING: Cannot connect to MQTT broker. Continuing anyway...")
+        
         # Get OS's root partition block device
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
         # Remove partition number - handle different storage device naming conventions
@@ -1159,7 +1197,6 @@ class LinuxSystemMonitor:
             # Publish fast sensors (includes built-in sleep via iostat)
             self.publish_fast_sensors()
             
-            # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Published sensor data (next update in {self.fast_interval}s)")
             # No need for sleep here as iostat already waits fast_interval seconds
     
     def update_disk_mapping(self) -> Dict[str, str]:
