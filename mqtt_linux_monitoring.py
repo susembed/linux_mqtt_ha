@@ -20,42 +20,55 @@ import sys
 import os
 import re
 from typing import Dict, List, Tuple
-# import paho.mqtt.client as mqtt
-
+import paho.mqtt.publish as publish
+import ssl
 # Load environment variables from .env file
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
+    import dotenv
 except ImportError:
     print("Warning: python-dotenv not installed. Install with: pip install python-dotenv")
-    print("Falling back to system environment variables only.")
+    sys.exit(1)
 
 
 class LinuxSystemMonitor:
     def __init__(self):
+        # Helper function to safely get environment variables
+        def get_env_var(key: str, default: str = "") -> str:
+            """Safely get environment variable with fallback to default"""
+            value = dotenv.get_key('.env', key)
+            if value is None:
+                print(f"Warning: Key {key} not found in .env, using default: '{default}'")
+                return default
+            return value
+        
         # Configuration - Load from environment variables with fallbacks
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
-        self.mqtt_user = os.getenv("MQTT_USER", "")
-        self.mqtt_pass = os.getenv("MQTT_PASS", "")
-        
-        # Parse network interfaces from comma-separated string
-        interfaces_str = os.getenv("NETWORK_INTERFACES", "eth0")
-        self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
+        self.mqtt_broker = get_env_var('MQTT_BROKER', 'localhost')
+        self.mqtt_port = int(get_env_var('MQTT_PORT', '1883'))
+        self.mqtt_user = get_env_var('MQTT_USER', '')
+        self.mqtt_pass = get_env_var('MQTT_PASS', '')
 
-        self.ignore_sensors = [sensor.strip() for sensor in os.getenv("IGNORE_SENSORS", "").split(",") if sensor.strip()]
-        self.ignore_disks_for_smart = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_SMART", "").split(",") if disk.strip()]
-        self.ignore_disks_for_temp = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_TEMP", "").split(",") if disk.strip()]
-        self.ignore_disks_for_status = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_STATUS", "").split(",") if disk.strip()]
-        self.ignore_disks_for_usage = [disk.strip() for disk in os.getenv("IGNORE_DISKS_FOR_USAGE", "").split(",") if disk.strip()]
+        interfaces_str = get_env_var('NETWORK_INTERFACES', 'eth0')
+        self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
         
-        # Intervals (in seconds) - Load from environment variables
-        self.fast_interval = int(os.getenv("FAST_INTERVAL", "10"))
-        self.slow_interval = int(os.getenv("SLOW_INTERVAL", "30"))  # Default to 30 seconds
+        ignore_sensors_str = get_env_var('IGNORE_SENSORS', '')
+        self.ignore_sensors = [sensor.strip() for sensor in ignore_sensors_str.split(",") if sensor.strip()] if ignore_sensors_str else []
         
-        # Home Assistant discovery prefix
-        self.ha_discovery_prefix = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
+        ignore_disks_smart_str = get_env_var('IGNORE_DISKS_FOR_SMART', '')
+        self.ignore_disks_for_smart = [disk.strip() for disk in ignore_disks_smart_str.split(",") if disk.strip()] if ignore_disks_smart_str else []
         
+        ignore_disks_temp_str = get_env_var('IGNORE_DISKS_FOR_TEMP', '')
+        self.ignore_disks_for_temp = [disk.strip() for disk in ignore_disks_temp_str.split(",") if disk.strip()] if ignore_disks_temp_str else []
+        
+        ignore_disks_status_str = get_env_var('IGNORE_DISKS_FOR_STATUS', '')
+        self.ignore_disks_for_status = [disk.strip() for disk in ignore_disks_status_str.split(",") if disk.strip()] if ignore_disks_status_str else []
+        
+        ignore_disks_usage_str = get_env_var('IGNORE_DISKS_FOR_USAGE', '')
+        self.ignore_disks_for_usage = [disk.strip() for disk in ignore_disks_usage_str.split(",") if disk.strip()] if ignore_disks_usage_str else []
+        
+        self.fast_interval = int(get_env_var('FAST_INTERVAL', '10'))
+        self.slow_interval = int(get_env_var('SLOW_INTERVAL', '30'))
+        self.ha_discovery_prefix = get_env_var('HA_DISCOVERY_PREFIX', 'homeassistant')
+
         with open('/etc/hostname', 'r') as f:
             self.hostname = f.read().strip()
         self.mqtt_client_id = f"linux_monitor_{self.hostname}"
@@ -76,7 +89,8 @@ class LinuxSystemMonitor:
         self.if_statistics = {}
         
         # MQTT client
-        self.mqtt_client = None
+        self.auth = None
+        self.tls = None
         
         # Topic storage
         self.topics = {}
@@ -112,57 +126,13 @@ class LinuxSystemMonitor:
     
     def setup_mqtt(self):
         """Setup MQTT client connection"""
-        if self.dry_run:
-            return
             
-        self.mqtt_client = mqtt.Client(self.mqtt_client_id)
+        if self.mqtt_user and self.mqtt_pass:
+            self.auth = {'username': self.mqtt_user, 'password': self.mqtt_pass}
         
-        # Add connection callbacks for debugging
-        def on_connect(client, userdata, flags, rc):
-            if rc == 0:
-                print("Connected to MQTT broker successfully")
-                # Set a flag to indicate connection is ready
-                self.mqtt_connected = True
-            else:
-                print(f"Failed to connect to MQTT broker: {rc}")
-                self.mqtt_connected = False
-    
-        def on_publish(client, userdata, mid):
-            print(f"Message {mid} published successfully")
-    
-        def on_disconnect(client, userdata, rc):
-            print(f"Disconnected from MQTT broker: {rc}")
-            self.mqtt_connected = False
-    
-        self.mqtt_client.on_connect = on_connect
-        self.mqtt_client.on_publish = on_publish
-        self.mqtt_client.on_disconnect = on_disconnect
+        if self.mqtt_port == 8883:
+            self.tls = {'cert_reqs': ssl.CERT_REQUIRED, 'tls_version': ssl.PROTOCOL_TLS}
         
-        if self.mqtt_user:
-            self.mqtt_client.username_pw_set(self.mqtt_user, self.mqtt_pass)
-        
-        # Initialize connection flag
-        self.mqtt_connected = False
-        
-        try:
-            self.mqtt_client.connect(self.mqtt_broker, self.mqtt_port, 60)
-            self.mqtt_client.loop_start()
-            
-            # Wait for connection to establish with timeout
-            max_wait = 10  # seconds
-            wait_time = 0
-            while not self.mqtt_connected and wait_time < max_wait:
-                time.sleep(0.5)
-                wait_time += 0.5
-            
-            if not self.mqtt_connected:
-                print(f"Failed to connect to MQTT broker within {max_wait} seconds")
-                sys.exit(1)
-            
-        except Exception as e:
-            print(f"Failed to connect to MQTT broker: {e}")
-            sys.exit(1)
-    
     def mqtt_publish(self, topic: str, payload: str, retain: bool = False):
         """Publish MQTT message"""
         cmd = [
