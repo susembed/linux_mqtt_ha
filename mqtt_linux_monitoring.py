@@ -84,13 +84,18 @@ class LinuxSystemMonitor:
         
         # Cache variables
         self.disk_serial_mapping = {}  # Maps serial -> device path
+        self.block_to_serial = {}       # Maps block device -> serial
         self.disk_info_cache = {}      # Maps serial -> disk info (name, model, size)
         self.root_disk = None     # Root disk device name (e.g., "/dev/sda1")
         self.root_block = None         # Root block device name
         self.if_statistics = {}
         self.fast_payload = {}
         self.slow_payload = {}
+        self.disk_info_payload = {}
         
+        self.slow_topic = "test/slowtopics"  # Default slow topics, can be overridden
+        self.fast_topic = "test/fasttopics"  # Default fast topics, can be overridden
+        self.disk_info_topic = "test/diskinfo"  # Default disk info topic, can be overridden
         # MQTT client
         self.auth = None
         self.tls = None
@@ -213,7 +218,7 @@ class LinuxSystemMonitor:
             return
 
         self.fast_payload['cpu-avg'] = cpu_data
-        for serial, disk_path in self.disk_serial_mapping:
+        for serial, disk_path in self.disk_serial_mapping.items():
             if not disk_path:
                 continue
                 
@@ -416,49 +421,43 @@ class LinuxSystemMonitor:
 
     def update_disk_usage(self) :
         """Get disk usage statistics using lsblk with JSON output (accepts device path)"""
-        for serial, disk_path in self.disk_serial_mapping.items():
-            if disk_path == self.root_disk:
-                block_path = self.root_block
-            else:
-                block_path = f"{disk_path}1"
-            output = self.run_command(["lsblk", "-o", "NAME,SIZE,FSUSED,FSAVAIL,FSTYPE,FSSIZE,MOUNTPOINT", "-J", "-b", block_path])
+        cmd = ["lsblk", "-o", "NAME,SIZE,FSUSED,FSAVAIL,FSTYPE,FSSIZE,MOUNTPOINT", "-J", "-b"]
+        cmd.extend(self.block_to_serial.keys())  # Add block devices to check
+        output = self.run_command(cmd)
 
-            try:
-                data = json.loads(output)
-                blockdevices = data.get("blockdevices", [])
-                
-                if blockdevices and len(blockdevices) > 0:
-                    device = blockdevices[0]
-                    
-                    
-                    # Get size values directly in bytes (thanks to -b flag)
-                    def safe_int(value):
-                        try:
-                            return int(value) if value and value != "null" else 0
-                        except (ValueError, TypeError):
-                            return 0
-                    
-                    fssize = safe_int(device.get("fssize", "0"))
-                    fsused = safe_int(device.get("fsused", "0"))
-                    fsavail = safe_int(device.get("fsavail", "0"))
-                    usage_percent = float(fsused/(fsused+fsavail)*100) if fsused > 0 or fsavail >0  else 0.0
-                    
-                    self.fast_payload[f"disk_usage_{serial}"] = {
-                        "usage_percent": usage_percent,
-                        "attrs": {
-                            "mount_point": device.get("mountpoint", "unmounted"),
-                            "total": fssize,
-                            "used": fsused,
-                            "free": fsavail,
-                            "fstype": device.get("fstype", "unknown") or "unknown",
-                            "device_name": device.get("name", "unknown"),
-                            "total_size": device.get("size", "unknown")
-                        }
+        try:
+            data = json.loads(output)
+            blockdevices = data.get("blockdevices", [])
+            
+            for block in blockdevices:
+                def safe_int(value):
+                    try:
+                        return int(value) if value and value != "null" else 0
+                    except (ValueError, TypeError):
+                        return 0
+
+                fssize = safe_int(block.get("fssize", "0"))
+                fsused = safe_int(block.get("fsused", "0"))
+                fsavail = safe_int(block.get("fsavail", "0"))
+                usage_percent = float(round(fsused/(fsused+fsavail)*100 , 2)) if fsused > 0 or fsavail > 0  else 0.0
+
+                serial = self.block_to_serial.get(f"/dev/{block.get('name', 'unknown')}", "unknown")
+                self.fast_payload[f"disk_usage_{serial}"] = {
+                    "usage_percent": usage_percent,
+                    "attrs": {
+                        "mount_point": block.get("mountpoint", "unmounted"),
+                        "total": fssize,
+                        "used": fsused,
+                        "free": fsavail,
+                        "fstype": block.get("fstype", "unknown") or "unknown",
+                        "device_name": block.get("name", "unknown"),
+                        "total_size": block.get("size", "unknown")
                     }
-                    
-            except (json.JSONDecodeError, ValueError, IndexError, KeyError) as e:
-                print(f"Error parsing lsblk JSON output for {block_path}: {e}")
-        
+                }
+                
+        except (json.JSONDecodeError, ValueError, IndexError, KeyError) as e:
+            print(f"Error parsing lsblk JSON output: {e}")
+
         return {
             "usage_percent": 0.0,
             "attrs": {
@@ -571,11 +570,11 @@ class LinuxSystemMonitor:
                 }
             }
 
-    def get_disk_info(self, device_path: str) -> Dict:
+    def get_disk_info(self, disk_path: str) -> Dict:
         """Get disk info data using JSON output from smartctl (accepts device path)"""
 
         # Use smartctl with JSON output for comprehensive SMART data
-        output = self.run_command_accept_error(["smartctl", "-i", "-j", device_path])
+        output = self.run_command_accept_error(["smartctl", "-i", "-j", disk_path])
         if not output:
             return {}
         
@@ -590,7 +589,7 @@ class LinuxSystemMonitor:
             for message in messages:
                 msg_string = message.get("string", "")
                 if "Unknown USB bridge" in msg_string:
-                    output = self.run_command_accept_error(["smartctl", "-i", "-d", "sat", "-j", device_path])
+                    output = self.run_command_accept_error(["smartctl", "-i", "-d", "sat", "-j", disk_path])
                     if output:
                         data = json.loads(output)
                         exit_status = data.get("smartctl", {}).get("exit_status", 0)
@@ -606,7 +605,7 @@ class LinuxSystemMonitor:
                 }
             # Extract device info
             info = {
-                "device_name": data.get("device", {}).get("name", device_path),
+                "device_name": data.get("device", {}).get("name", disk_path),
                 "model_family": data.get("model_family", "Unknown"),
                 "model_name": data.get("model_name", "Unknown"),
                 "serial_number": data.get("serial_number", "Unknown"),
@@ -622,10 +621,10 @@ class LinuxSystemMonitor:
             return info
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            print(f"Error parsing smartctl JSON output for {device_path}: {e}")
+            print(f"Error parsing smartctl JSON output for {disk_path}: {e}")
             
             return {
-                "device_name": device_path,
+                "device_name": disk_path,
                 "firmware_version": "Unknown",
                 "user_capacity": 0,
                 "logical_block_size": 512,
@@ -651,7 +650,7 @@ class LinuxSystemMonitor:
         # Fallback to uname if /etc/os-release not available
         return self.run_command(['uname', '-o'])
     def get_hardware_info(self) -> str:
-        """Get hardware information using lshw"""
+        """Get CPU information from /proc/cpuinfo"""
         cpu_name = "Unknown CPU"
         with open('/proc/cpuinfo') as f:
             for line in f:
@@ -699,8 +698,8 @@ class LinuxSystemMonitor:
                 "name": "CPU Usage",
                 "unit_of_measurement": "%",
                 "suggested_display_precision": 1,
-                "state_topic": f"{self.topics['cpu_usage']}",
-                "json_attributes_topic": f"{self.topics['cpu_usage']}",
+                "state_topic": self.fast_topic,
+                "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json | tojson }}",
                 "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
                 "icon": "mdi:cpu-64-bit",
@@ -931,32 +930,22 @@ class LinuxSystemMonitor:
         """Publish slow interval sensors (SMART data)"""
         # print("Publishing slow interval sensors (SMART data)...")
         
-        # Update disk mapping and get current serials
-        disk_serials = self.get_disk_list_by_serial()
-        
-        for serial in disk_serials:
+        for serial in self.disk_serial_mapping:
             if serial not in self.ignore_disks_for_smart:
-                if (serial in self.topics['disk_smart']) and ("disk_smart" not in self.ignore_sensors):
+                if ("disk_smart" not in self.ignore_sensors):
                     self.slow_payload[f"disk_smart_{serial}"] = self.get_disk_smart(serial)
                 
-                if (serial in self.topics['disk_status']) and ("disk_info" not in self.ignore_sensors):
+                if  ("disk_info" not in self.ignore_sensors):
                     self.slow_payload[f"disk_info_{serial}"] = self.get_disk_status(serial)
         self.mqtt_publish(self.slow_topic, json.dumps(self.slow_payload))
     def publish_disk_info(self):
         """Publish disk info and status sensors"""
         print("Publishing disk info and status sensors...")
         disk_info_payload = {}
-        # Update disk mapping and get current serials
-        disk_serials = self.get_disk_list_by_serial()
-        
-        for serial in disk_serials:
-            if serial in self.topics['disk_info']:
-                disk_path = self.disk_serial_mapping.get(serial, "")
-                if not disk_path:
-                    continue
-                
-                disk_info_payload[f"{serial}"] = self.get_disk_info(disk_path)
-        self.mqtt_publish(self.topics['disk_info'], json.dumps(disk_info_payload), True)
+
+        for serial, disk_path in self.disk_serial_mapping.items():
+            disk_info_payload[f"{serial}"] = self.get_disk_info(disk_path)
+        self.mqtt_publish(self.disk_info_topic, json.dumps(disk_info_payload), True)
     def update_network_sensors(self):
         """Publish network interface sensors"""
         # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting network interface data...")
@@ -1025,19 +1014,9 @@ class LinuxSystemMonitor:
         self.update_iostat_data()
 
         self.update_network_sensors()
-
-        for serial, disk_path in self.disk_serial_mapping:
-            if not disk_path:
-                continue
-                
-            
-            if disk_path == self.root_disk:
-                # For root disk, also publish disk usage
-                self.mqtt_publish(self.topics['disk_usage'][serial], json.dumps(self.get_disk_usage(self.root_block)))
-                # For normal disks, only fetch data of the first partition
-            else:
-                self.mqtt_publish(self.topics['disk_usage'][serial], json.dumps(self.get_disk_usage(f"{disk_path}1")))
-    
+        self.update_disk_usage()  # Update disk usage statistics
+        # Publish fast sensors payload
+        self.mqtt_publish(self.fast_topic, json.dumps(self.fast_payload))
     def cleanup(self, signum=None, frame=None):
         """Handle script termination"""
         print("Cleaning up...")
@@ -1091,27 +1070,29 @@ class LinuxSystemMonitor:
         while True:
             current_time = int(time.time())
             
+            # Publish fast sensors (includes built-in sleep via iostat)
+            self.publish_fast_sensors()
             # Check if it's time for slow sensors update
             if current_time - self.last_slow_update >= self.slow_interval:
                 self.publish_slow_sensors()
                 self.last_slow_update = current_time
-            
-            # Publish fast sensors (includes built-in sleep via iostat)
-            self.publish_fast_sensors()
+            self.update_disk_mapping()  # Update disk mapping if needed
             
             # No need for sleep here as iostat already waits fast_interval seconds
     
-    def update_disk_mapping(self) -> Dict[str, str]:
+    def update_disk_mapping(self):
         """Update disk serial to device path mapping using lsblk JSON output"""
         output = self.run_command(["lsblk", "-d", "-o", "NAME,TRAN,SERIAL,SIZE,MODEL", "-J", "--tree"])
         
         if not output:
             return self.disk_serial_mapping
         
+        self.block_to_serial = {}
         try:
             data = json.loads(output)
             new_mapping = {}
             new_info_cache = {}
+            self.disk_path_mapping = {}
             
             for device in data.get("blockdevices", []):
                 name = device.get("name", "")
@@ -1122,17 +1103,17 @@ class LinuxSystemMonitor:
                 
                 # Only include physical disks with serials
                 # if name and serial and tran in ["sata", "nvme", "usb", "scsi"]:
-                device_path = f"/dev/{name}"
+                disk_path = f"/dev/{name}"
                 # Verify device exists and matches our disk pattern
-                if os.path.exists(device_path) and re.match(r'^/dev/(sd|nvme|hd|mmc)', device_path):
-                    new_mapping[serial] = device_path
+                if os.path.exists(disk_path) and re.match(r'^/dev/(sd|nvme|hd|mmc)', disk_path):
+                    new_mapping[serial] = disk_path
                     new_info_cache[serial] = {
                         "name": name,
                         "model": model or "Unknown",
                         "size": size or "Unknown",
                         "transport": tran
                     }
-            
+                    self.disk_path_mapping[disk_path] = serial
             # Update class variables
             old_serials = set(self.disk_serial_mapping.keys())
             new_serials = set(new_mapping.keys())
@@ -1145,22 +1126,28 @@ class LinuxSystemMonitor:
                 print(f"New disks detected: {', '.join(added_serials)}")
             if removed_serials:
                 print(f"Disks removed: {', '.join(removed_serials)}")
-            
-            self.disk_serial_mapping = new_mapping
-            self.disk_info_cache = new_info_cache
-            print(f"Updated disk mapping: {len(self.disk_serial_mapping)} disks found")
+            if added_serials or removed_serials:
+                self.disk_serial_mapping = new_mapping
+                self.disk_info_cache = new_info_cache
+                print(f"Updated disk mapping: {len(self.disk_serial_mapping)} disks found")
+                for serial, disk_path in self.disk_serial_mapping.items():
+                    if disk_path == self.root_disk:
+                        block_path = self.root_block
+                    else:
+                        block_path = f"{disk_path}p1" if re.match(r'^/dev/(nvme|mmc)', disk_path) else f"{disk_path}1"
+                    self.block_to_serial[block_path] = serial
 
-            self.setup_discovery()  # Update discovery configuration
-            # Add delay to allow Home Assistant to process discovery messages
-            if not self.dry_run:
-                print("Waiting for Home Assistant to process discovery messages...")
-                time.sleep(5)  # 5 second delay
-            
-            self.publish_disk_info()
-            print("Updated disk entities discovery and disk info and status values")
-            for serial, path in self.disk_serial_mapping.items():
-                print(f"  {serial}: {path} ({self.disk_info_cache.get(serial, {}).get('model', 'Unknown')})")
-            return self.disk_serial_mapping
+                self.setup_discovery()  # Update discovery configuration
+                # Add delay to allow Home Assistant to process discovery messages
+                if not self.dry_run:
+                    print("Waiting for Home Assistant to process discovery messages...")
+                    time.sleep(5)  # 5 second delay
+                
+                self.publish_disk_info()
+                print("Updated disk entities discovery and disk info and status values")
+                for serial, path in self.disk_serial_mapping.items():
+                    print(f"  {serial}: {path} ({self.disk_info_cache.get(serial, {}).get('model', 'Unknown')})")
+            return
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             print(f"Error parsing lsblk JSON output: {e}")
@@ -1169,20 +1156,7 @@ class LinuxSystemMonitor:
     def get_disk_list_by_serial(self) -> List[str]:
         """Get list of disk serials (updated each call)"""
         return list(self.disk_serial_mapping.keys())
-
-    # def get_disk_display_name(self, serial: str) -> str:
-    #     """Get a human-readable name for a disk based on its serial"""
-    #     info = self.disk_info_cache.get(serial, {})
-    #     name = info.get("name", serial[:8])
-    #     model = info.get("model", "Unknown")
-    #     size = info.get("size", "")
-        
-    #     if model != "Unknown" and size:
-    #         return f"{name} ({model} {size})"
-    #     elif model != "Unknown":
-    #         return f"{name} ({model})"
-    #     else:
-    #         return f"{name} (S/N: {serial[:8]})"
+    
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Linux System Monitor with MQTT and Home Assistant Discovery")
