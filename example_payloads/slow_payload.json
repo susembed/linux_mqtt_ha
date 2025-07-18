@@ -1,0 +1,42 @@
+{
+    "disk_smart_L02139J006880": {
+        "smart_passed": 0,
+        "temperature": 48,
+        "attrs": {
+            "new_bad_blk_cnt": "0",
+            "power_on_hours": "5360",
+            "power_cycle_count": "2706",
+            "ssd_protect_mode": "0",
+            "sata_phy_error_cnt": "1",
+            "bad_block_cnt": "7864350",
+            "program_fail_cnt": "0",
+            "erase_fail_cnt": "0",
+            "erase_cnt": "360785444967",
+            "bad_cluster_cnt": "0",
+            "read_retry_cnt": "0",
+            "spare_blk_cnt_left": "1580",
+            "reported_uncorrect": "0",
+            "power-off_retract_count": "520",
+            "temperature_celsius": "48 (Min/Max 48/48)",
+            "udma_crc_error_count": "0",
+            "min_erase_cnt": "84",
+            "max_erase_cnt": "125",
+            "avg_erase_cnt": "103",
+            "slc_min_erase_cnt": "1748",
+            "slc_max_erase_cnt": "3466",
+            "slc_avg_erase_cnt": "2642",
+            "ssd_life_left": "6",
+            "total_lbas_written": "5877",
+            "total_lbas_read": "5084",
+            "bit_error_cnt": "0",
+            "supported": true
+        }
+    },
+    "disk_smart_50026B76852BE5D2": {
+        "smart_passed": 0,
+        "temperature": 39,
+        "attrs": {
+            "supported": true
+        }
+    }
+}

@@ -1,0 +1,86 @@
+{
+    "mem_usage": {
+        "mem_usage": 26.8,
+        "mem": {
+            "total": 16119386112,
+            "used": 4315635712,
+            "free": 10026356736,
+            "shared": 29368320,
+            "buff_cache": 2112024576,
+            "available": 11803750400
+        },
+        "swap_usage": 0.0,
+        "swap": {
+            "total": 8589930496,
+            "used": 0,
+            "free": 8589930496
+        }
+    },
+    "cpu-avg": {
+        "user": 0.3,
+        "nice": 0.0,
+        "system": 0.18,
+        "iowait": 0.01,
+        "steal": 0.0,
+        "idle": 99.51
+    },
+    "disk_io_L02139J006880": {
+        "read_kbs": 0.0,
+        "write_kbs": 36.0,
+        "util": 0.04
+    },
+    "disk_io_50026B76852BE5D2": {
+        "read_kbs": 0.0,
+        "write_kbs": 0.0,
+        "util": 0.0
+    },
+    "net_stats_enp4s0": {
+        "rx_speed": 98303,
+        "tx_speed": 2760,
+        "link_speed": 1000,
+        "duplex": "full"
+    },
+    "disk_usage_L02139J006880": {
+        "usage_percent": 43.94,
+        "attrs": {
+            "mount_point": "/",
+            "total": 123878612992,
+            "used": 51649466368,
+            "free": 65889136640,
+            "fstype": "ext4",
+            "device_name": "sda2",
+            "total_size": 126464724480
+        }
+    },
+    "disk_usage_50026B76852BE5D2": {
+        "usage_percent": 0.0,
+        "attrs": {
+            "mount_point": null,
+            "total": 0,
+            "used": 0,
+            "free": 0,
+            "fstype": "vfat",
+            "device_name": "nvme0n1p1",
+            "total_size": 314572800
+        }
+    },
+    "disk_status_L02139J006880": {
+        "status": "active/idle"
+    },
+    "disk_status_50026B76852BE5D2": {
+        "status": "unknown",
+        "error": "Failed to get status"
+    },
+    "disk_usage_unknown": {
+        "usage_percent": 0.0,
+        "attrs": {
+            "mount_point": null,
+            "total": 0,
+            "used": 0,
+            "free": 0,
+            "fstype": "unknown",
+            "device_name": "nvme0n1",
+            "total_size": 512110190592
+        }
+    }
+}

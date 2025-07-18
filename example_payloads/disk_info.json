@@ -1,13 +1,28 @@
 {
-    "device_name": "/dev/sda",
-    "model_family": "Seagate Momentus Thin",
-    "model_name": "ST320LT007-9ZV142",
-    "serial_number": "W0Q95TAW",
-    "firmware_version": "0007DEM1",
-    "user_capacity": 320072933376,
-    "logical_block_size": 512,
-    "rotation_rate": 7200,
-    "form_factor": "Unknown",
-    "interface_speed": "Unknown / 3.0 Gb/s",
-    "smart_available": true
+    "L02139J006880": {
+        "device_name": "/dev/sda",
+        "model_family": "Lexar 128GB SSD",
+        "model_name": "Lexar 128GB SSD",
+        "serial_number": "L02139J006880",
+        "firmware_version": "H190117D",
+        "user_capacity": 128035676160,
+        "logical_block_size": 512,
+        "rotation_rate": 0,
+        "form_factor": "2.5 inches",
+        "interface_speed": "3.0 Gb/s / 6.0 Gb/s",
+        "smart_available": true
+    },
+    "50026B76852BE5D2": {
+        "device_name": "/dev/nvme0n1",
+        "model_family": "Unknown",
+        "model_name": "KINGSTON OM8PCP3512F-AI1",
+        "serial_number": "50026B76852BE5D2",
+        "firmware_version": "ECFK52.8",
+        "user_capacity": 512110190592,
+        "logical_block_size": 512,
+        "rotation_rate": 0,
+        "form_factor": "Unknown",
+        "interface_speed": "Unknown / Unknown",
+        "smart_available": true
+    }
 }
