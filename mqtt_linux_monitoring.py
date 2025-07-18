@@ -96,11 +96,11 @@ class LinuxSystemMonitor:
         self.fast_payload = {}
         self.slow_payload = {}
         self.disk_info_payload = {}
-        
-        self.slow_topic = "test/slowtopics"  # Default slow topics, can be overridden
-        self.fast_topic = "test/fasttopics"  # Default fast topics, can be overridden
-        self.disk_info_topic = "test/diskinfo"  # Default disk info topic, can be overridden
-        self.one_time_topic = "test/one_time"  # Default one-time topic, can be overridden
+
+        self.slow_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/slow"  
+        self.fast_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/fast"  
+        self.disk_info_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/diskinfo"  
+        self.one_time_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/one_time"  
         # MQTT client
         self.auth = None
         self.tls = None
@@ -257,7 +257,8 @@ class LinuxSystemMonitor:
                                         "source": "virtual_thermal"
                                     }
                                 }
-                        
+                                return
+                    
                     if "coretemp" in sensor_name.lower() or "cpu" in sensor_name.lower():
                         # Collect core temperatures
                         core_temps = {}
@@ -304,7 +305,8 @@ class LinuxSystemMonitor:
                                 "cores": core_temps_array  # Array of core temperatures
                             }
                         }
-                
+                        return
+
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 print(f"Error parsing sensors JSON output: {e}")
         
@@ -312,7 +314,7 @@ class LinuxSystemMonitor:
         try:
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 temp = int(f.read().strip()) / 1000.0
-                return {
+                self.fast_payload['cpu_temp'] = {
                     "temperature": round(temp, 1),
                     "attrs": {
                         "sensor": "thermal_zone0",
@@ -320,7 +322,7 @@ class LinuxSystemMonitor:
                     }
                 }
         except (FileNotFoundError, ValueError):
-            return {
+            self.fast_payload['cpu_temp'] = {
                 "temperature": 0.0,
                 "attrs": {
                     "sensor": "unknown",
@@ -676,7 +678,6 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_last_boot",
             }
         if "cpu_usage" not in self.ignore_sensors:
-            self.topics['cpu_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_avg_cpu/state"
             dev_discovery["cmps"][f"{self.device_id}_cpu_usage"] = {
                 "p": "sensor",
                 "name": "CPU Usage",
@@ -684,38 +685,36 @@ class LinuxSystemMonitor:
                 "suggested_display_precision": 1,
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
-                "json_attributes_template": "{{ value_json | tojson }}",
-                "value_template": "{{ 100 - (value_json.idle | float(0)) }}",
+                "json_attributes_template": "{{ value_json.cpu-avg | tojson }}",
+                "value_template": "{{ 100 - (value_json.cpu-avg.idle | float(0)) }}",
                 "icon": "mdi:cpu-64-bit",
                 "unique_id": f"{self.device_id}_cpu_usage",
                 "state_class": "measurement"
             }
         if "cpu_temp" not in self.ignore_sensors:
-            self.topics['cpu_temp'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_cpu_temp/state"
             dev_discovery["cmps"][f"{self.device_id}_cpu_temp"] = {
                 "p": "sensor",
                 "name": "CPU Temperature",
                 "unit_of_measurement": "°C",
-                "state_topic": f"{self.topics['cpu_temp']}",
-                "json_attributes_topic": f"{self.topics['cpu_temp']}",
-                "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                "value_template": "{{ value_json.temperature }}",
+                "state_topic": self.fast_topic,
+                "json_attributes_topic": self.fast_topic,
+                "json_attributes_template": "{{ value_json.cpu_temp.attrs | tojson }}",
+                "value_template": "{{ value_json.cpu_temp.temperature | float(0) }}",
                 "device_class": "temperature",
                 "icon": "mdi:thermometer",
                 "unique_id": f"{self.device_id}_cpu_temp",
                 "state_class": "measurement",
             }
         if "mem_usage" not in self.ignore_sensors:
-            self.topics['memory_usage'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_memory_usage/state"
             if "ram_usage" not in self.ignore_sensors:
                 dev_discovery["cmps"][f"{self.device_id}_memory_usage"] = {
                     "p": "sensor",
                     "name": "Memory Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.topics['memory_usage']}",
-                    "json_attributes_topic": f"{self.topics['memory_usage']}",
-                    "json_attributes_template": "{{ value_json.mem | tojson }}",
-                    "value_template": "{{ value_json.mem_usage }}",
+                    "state_topic": self.fast_topic,
+                    "json_attributes_topic": self.fast_topic,
+                    "json_attributes_template": "{{ value_json.mem_usage.mem | tojson }}",
+                    "value_template": "{{ value_json.mem_usage.mem_usage | float(0) }}",
                     "icon": "mdi:memory",
                     "unique_id": f"{self.device_id}_memory_usage",
                     "state_class": "measurement"
@@ -725,20 +724,15 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": "Swap Usage",
                     "unit_of_measurement": "%",
-                    "state_topic": f"{self.topics['memory_usage']}",
-                    "json_attributes_topic": f"{self.topics['memory_usage']}",
-                    "json_attributes_template": "{{ value_json.swap | tojson }}",
-                    "value_template": "{{ value_json.swap_usage }}",
+                    "state_topic": self.fast_topic,
+                    "json_attributes_topic": self.fast_topic,
+                    "json_attributes_template": "{{ value_json.mem_usage.swap | tojson }}",
+                    "value_template": "{{ value_json.mem_usage.swap_usage | float(0) }}",
                     "icon": "mdi:memory",
                     "unique_id": f"{self.device_id}_swap_usage",
                     "state_class": "measurement"
             }
         # Disk sensors
-        self.topics['disk_smart'] = {}
-        self.topics['disk_info'] = {}
-        self.topics['disk_load'] = {}
-        self.topics['disk_usage'] = {}
-        self.topics['disk_status'] = {}
         
         for serial in self.disk_serial_mapping:
             # display_name = self.get_disk_display_name(serial)
@@ -752,14 +746,13 @@ class LinuxSystemMonitor:
             
             if serial not in self.ignore_disks_for_smart:
                 if "disk_smart" not in self.ignore_sensors:
-                    self.topics['disk_smart'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_smart_{safe_serial}/state"
                     dev_discovery["cmps"][f"{self.device_id}_disk_smart_{safe_serial}"] = {
                         "p": "binary_sensor",
                         "name": f"{disk_name} SMART health",
-                        "state_topic": self.topics['disk_smart'][serial],
-                        "json_attributes_topic": self.topics['disk_smart'][serial],
-                        "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                        "value_template": "{{'OFF' if value_json.smart_passed|int(0) == 1 else 'ON'}}",
+                        "state_topic": self.slow_topic,
+                        "json_attributes_topic": self.slow_topic,
+                        "json_attributes_template": f"{{ value_json.disk_smart_{serial}.attrs | tojson }}",
+                        "value_template": f"{{'OFF' if value_json.disk_smart_{serial}.smart_passed|int(0) == 1 else 'ON'}}",
                         "device_class": "problem",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
@@ -768,8 +761,8 @@ class LinuxSystemMonitor:
                     dev_discovery["cmps"][f"{self.device_id}_disk_temp_{safe_serial}"] = {
                         "p": "sensor",
                         "name": f"{disk_name} temperature",
-                        "state_topic": self.topics['disk_smart'][serial],
-                        "value_template": "{{ value_json.temperature }}",
+                        "state_topic": self.slow_topic,
+                        "value_template": f"{{ value_json.disk_smart_{serial}.temperature }}",
                         "unit_of_measurement": "°C",
                         "device_class": "temperature",
                         "icon": "mdi:thermometer",
@@ -777,25 +770,23 @@ class LinuxSystemMonitor:
                         "state_class": "measurement"
                     }
                 if "disk_info" not in self.ignore_sensors:
-                    self.topics['disk_info'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_info_{safe_serial}/state"
                     dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
                         "p": "sensor",
                         "name": f"{disk_name} info",
-                        "state_topic": self.topics['disk_info'][serial],
-                        "json_attributes_topic": self.topics['disk_info'][serial],
-                        "json_attributes_template": "{{ value_json | tojson }}",
-                        "value_template": "{{ value_json.model_name }}",
+                        "state_topic": self.fast_topic,
+                        "json_attributes_topic": self.disk_info_topic,
+                        "json_attributes_template": f"{{ value_json.{serial} | tojson }}",
+                        "value_template": f"{{ value_json.{serial}.model_name }}",
                         # "device_class": "diagnostic",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
                         }
             if "disk_load" not in self.ignore_sensors:
-                self.topics['disk_load'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_load_{safe_serial}/state"
                 dev_discovery["cmps"][f"{self.device_id}_disk_write_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} write speed",
-                    "state_topic": self.topics['disk_load'][serial],
-                    "value_template": "{{ value_json.write_kbs | float(0) }}",
+                    "state_topic": self.fast_topic,
+                    "value_template": f"{{{{ value_json.disk_io_{serial}.write_kbs | float(0) }}}}",
                     "unit_of_measurement": "kB/s",
                     "device_class": "data_rate",
                     "icon": "mdi:harddisk",
@@ -805,8 +796,8 @@ class LinuxSystemMonitor:
                 dev_discovery["cmps"][f"{self.device_id}_disk_read_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} read speed",
-                    "state_topic": self.topics['disk_load'][serial],
-                    "value_template": "{{ value_json.read_kbs | float(0) }}",
+                    "state_topic": self.fast_topic,
+                    "value_template": f"{{{{ value_json.disk_io_{serial}.read_kbs | float(0) }}}}",
                     "unit_of_measurement": "kB/s",
                     "device_class": "data_rate",
                     "icon": "mdi:harddisk",
@@ -816,34 +807,32 @@ class LinuxSystemMonitor:
                 dev_discovery["cmps"][f"{self.device_id}_disk_util_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} utilization",
-                    "state_topic": self.topics['disk_load'][serial],
-                    "value_template": "{{ value_json.util | float(0) }}",
+                    "state_topic": self.fast_topic,
+                    "value_template": f"{{{{ value_json.disk_io_{serial}.util | float(0) }}}}",
                     "unit_of_measurement": "%",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
                     "state_class": "measurement"
                 }
             if "disk_usage" not in self.ignore_sensors:
-                self.topics['disk_usage'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_usage_{safe_serial}/state"
                 dev_discovery["cmps"][f"{self.device_id}_disk_usage_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} usage",
-                    "state_topic": self.topics['disk_usage'][serial],
-                    "json_attributes_topic": self.topics['disk_usage'][serial],
-                    "json_attributes_template": "{{ value_json.attrs | tojson }}",
-                    "value_template": "{{ value_json.usage_percent }}",
+                    "state_topic": self.fast_topic,
+                    "json_attributes_topic": self.fast_topic,
+                    "json_attributes_template": f"{{ value_json.disk_usage_{serial}.attrs | tojson }}",
+                    "value_template": f"{{{{ value_json.disk_usage_{serial}.usage_percent }}}}",
                     "unit_of_measurement": "%",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
                     "state_class": "measurement"
                 }
             if "disk_status" not in self.ignore_sensors:
-                self.topics['disk_status'][serial] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_disk_status_{safe_serial}/state"
                 dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} status",
-                    "state_topic": self.topics['disk_status'][serial],
-                    "value_template": "{{ value_json.status }}",
+                    "state_topic": f"{self.fast_topic}/disk_status_{serial}",
+                    "value_template": f"{{{{ value_json.disk_status_{serial}.status }}}}",
                     "icon": "mdi:power",
                     "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
                 }
@@ -851,13 +840,12 @@ class LinuxSystemMonitor:
             self.topics['net_stats'] = {}
             for if_name in self.ifs_name:
                 safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
-                self.topics['net_stats'][if_name] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_net_stats_{safe_ifname}/state"
                 if "net_rx" not in self.ignore_sensors :
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
                         "p": "sensor",
                         "name": f"{if_name} Rx speed",
-                        "state_topic": self.topics['net_stats'][if_name],
-                        "value_template": "{{ value_json.rx_speed | int(0)}}", 
+                        "state_topic": self.fast_topic,
+                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.rx_speed | int(0) }}}}", 
                         "unit_of_measurement": "B/s",
                         "device_class": "data_rate",
                         "icon": "mdi:download",
@@ -868,8 +856,8 @@ class LinuxSystemMonitor:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
                         "p": "sensor",
                         "name": f"{if_name} Tx speed",
-                        "state_topic": self.topics['net_stats'][if_name],
-                        "value_template": "{{ value_json.tx_speed | int(0)}}", 
+                        "state_topic": self.fast_topic,
+                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.tx_speed | int(0) }}}}", 
                         "unit_of_measurement": "B/s",
                         "device_class": "data_rate",
                         "icon": "mdi:upload",
@@ -880,8 +868,8 @@ class LinuxSystemMonitor:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
                         "p": "sensor",
                         "name": f"{if_name} Link Speed",
-                        "state_topic": self.topics['net_stats'][if_name],
-                        "value_template": "{{ value_json.link_speed | int(0)}}", 
+                        "state_topic": self.fast_topic,
+                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.link_speed | int(0) }}}}", 
                         "unit_of_measurement": "Mbit/s",
                         "suggested_display_precision": 0,
                         "device_class": "data_rate",
@@ -893,8 +881,8 @@ class LinuxSystemMonitor:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
                         "p": "sensor",
                         "name": f"{if_name} Duplex",
-                        "state_topic": self.topics['net_stats'][if_name],
-                        "value_template": "{{ value_json.duplex }}",
+                        "state_topic": self.fast_topic,
+                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.duplex }}}}",
                         "icon": "mdi:network",
                         "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
                     }
@@ -953,7 +941,8 @@ class LinuxSystemMonitor:
                     duplex = f.read().strip()
                 
                 # Use the correct topic from discovery configuration
-                self.fast_payload[f"net_stats_{ifname}"] = {
+                safe_ifname = ifname.replace(".", "_")
+                self.fast_payload[f"net_stats_{safe_ifname}"] = {
                     "rx_speed": rx_speed,  # Bytes per second
                     "tx_speed": tx_speed,  # Bytes per second
                     "link_speed": link_speed,

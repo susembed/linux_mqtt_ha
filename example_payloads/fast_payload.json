@@ -1,13 +1,20 @@
 {
+    "cpu_temp": {
+        "temperature": 0.0,
+        "attrs": {
+            "sensor": "unknown",
+            "error": "No temperature sensors found"
+        }
+    },
     "mem_usage": {
-        "mem_usage": 26.8,
+        "mem_usage": 39.0,
         "mem": {
-            "total": 16119386112,
-            "used": 4315635712,
-            "free": 10026356736,
-            "shared": 29368320,
-            "buff_cache": 2112024576,
-            "available": 11803750400
+            "total": 15807672320,
+            "used": 6164844544,
+            "free": 7173910528,
+            "shared": 66064384,
+            "buff_cache": 2849382400,
+            "available": 9642827776
         },
         "swap_usage": 0.0,
         "swap": {
@@ -17,42 +24,59 @@
         }
     },
     "cpu-avg": {
-        "user": 0.3,
+        "user": 1.63,
         "nice": 0.0,
-        "system": 0.18,
-        "iowait": 0.01,
+        "system": 1.19,
+        "iowait": 0.0,
         "steal": 0.0,
-        "idle": 99.51
+        "idle": 97.18
     },
-    "disk_io_L02139J006880": {
-        "read_kbs": 0.0,
-        "write_kbs": 36.0,
-        "util": 0.04
-    },
-    "disk_io_50026B76852BE5D2": {
+    "disk_io_W0Q95TAW": {
         "read_kbs": 0.0,
         "write_kbs": 0.0,
         "util": 0.0
     },
-    "net_stats_enp4s0": {
-        "rx_speed": 98303,
-        "tx_speed": 2760,
+    "disk_io_L02139J006880": {
+        "read_kbs": 0.0,
+        "write_kbs": 4.4,
+        "util": 0.0
+    },
+    "disk_io_BTNH00220909512A": {
+        "read_kbs": 0.0,
+        "write_kbs": 0.0,
+        "util": 0.0
+    },
+    "net_stats_enp6s0": {
+        "rx_speed": 408,
+        "tx_speed": 8441,
         "link_speed": 1000,
         "duplex": "full"
     },
+    "disk_usage_W0Q95TAW": {
+        "usage_percent": 0.0,
+        "attrs": {
+            "mount_point": null,
+            "total": 0,
+            "used": 0,
+            "free": 0,
+            "fstype": "unknown",
+            "device_name": "sda1",
+            "total_size": 110355283968
+        }
+    },
     "disk_usage_L02139J006880": {
-        "usage_percent": 43.94,
+        "usage_percent": 44.0,
         "attrs": {
             "mount_point": "/",
             "total": 123878612992,
-            "used": 51649466368,
-            "free": 65889136640,
+            "used": 51719057408,
+            "free": 65819545600,
             "fstype": "ext4",
-            "device_name": "sda2",
+            "device_name": "sdb2",
             "total_size": 126464724480
         }
     },
-    "disk_usage_50026B76852BE5D2": {
+    "disk_usage_BTNH00220909512A": {
         "usage_percent": 0.0,
         "attrs": {
             "mount_point": null,
@@ -61,26 +85,17 @@
             "free": 0,
             "fstype": "vfat",
             "device_name": "nvme0n1p1",
-            "total_size": 314572800
+            "total_size": 104857600
         }
+    },
+    "disk_status_W0Q95TAW": {
+        "status": "active/idle"
     },
     "disk_status_L02139J006880": {
         "status": "active/idle"
     },
-    "disk_status_50026B76852BE5D2": {
+    "disk_status_BTNH00220909512A": {
         "status": "unknown",
         "error": "Failed to get status"
-    },
-    "disk_usage_unknown": {
-        "usage_percent": 0.0,
-        "attrs": {
-            "mount_point": null,
-            "total": 0,
-            "used": 0,
-            "free": 0,
-            "fstype": "unknown",
-            "device_name": "nvme0n1",
-            "total_size": 512110190592
-        }
     }
 }
