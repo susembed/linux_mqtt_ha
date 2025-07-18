@@ -93,6 +93,7 @@ class LinuxSystemMonitor:
         self.root_disk = None     # Root disk device name (e.g., "/dev/sda1")
         self.root_block = None         # Root block device name
         self.if_statistics = {}
+        self.one_time_payload = {}
         self.fast_payload = {}
         self.slow_payload = {}
         self.disk_info_payload = {}
@@ -672,8 +673,8 @@ class LinuxSystemMonitor:
                 "p": "sensor",
                 "name": "Last Boot",
                 "icon":"mdi:clock",
-                "state_topic": f"{self.topics['uptime']}",
-                "value_template":"{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
+                "state_topic": self.one_time_topic,
+                "value_template":"{{ (now() | as_timestamp - (value_json.uptime |float(0))) |round(0) | as_datetime |as_local}}",
                 "device_class":"timestamp",
                 "unique_id": f"{self.device_id}_last_boot",
             }
@@ -895,8 +896,9 @@ class LinuxSystemMonitor:
         if "last_boot" not in self.ignore_sensors:
             with open('/proc/uptime', 'r') as f:
                 uptime_seconds = float(f.read().split()[0])
-            self.mqtt_publish(self.one_time_topic, str(uptime_seconds), True)
-    
+            self.one_time_payload["uptime"] = uptime_seconds
+        self.mqtt_publish(self.one_time_topic, json.dumps(self.one_time_payload), True)
+
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
         # print("Publishing slow interval sensors (SMART data)...")
