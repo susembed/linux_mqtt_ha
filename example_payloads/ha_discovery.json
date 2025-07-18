@@ -2,8 +2,8 @@
     "dev": {
         "ids": "debian",
         "name": "debian",
-        "sw_version": "Debian GNU/Linux 12 (bookworm)",
-        "model": "AMD Ryzen 5 8600G w/ Radeon 760M Graphics"
+        "sw_version": "LMDE 6 (faye)",
+        "model": "Intel(R) Core(TM) i5-4570 CPU @ 3.20GHz"
     },
     "o": {
         "name": "linux_mqtt_ha",
@@ -15,8 +15,8 @@
             "p": "sensor",
             "name": "Last Boot",
             "icon": "mdi:clock",
-            "state_topic": "test/sensor/debian_uptime/state",
-            "value_template": "{{ (now() | as_timestamp - (value |float(0))) |round(0) | as_datetime |as_local}}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/one_time",
+            "value_template": "{{ (now() | as_timestamp - (value_json.uptime |float(0))) |round(0) | as_datetime |as_local}}",
             "device_class": "timestamp",
             "unique_id": "debian_last_boot"
         },
@@ -25,10 +25,10 @@
             "name": "CPU Usage",
             "unit_of_measurement": "%",
             "suggested_display_precision": 1,
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_template": "{{ value_json.cpu-avg | tojson }}",
-            "value_template": "{{ 100 - (value_json.cpu-avg.idle | float(0)) }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_template": "{{ value_json.cpu_avg | tojson }}",
+            "value_template": "{{ 100 - (value_json.cpu_avg.idle | float(0)) }}",
             "icon": "mdi:cpu-64-bit",
             "unique_id": "debian_cpu_usage",
             "state_class": "measurement"
@@ -37,8 +37,8 @@
             "p": "sensor",
             "name": "CPU Temperature",
             "unit_of_measurement": "\u00b0C",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
             "json_attributes_template": "{{ value_json.cpu_temp.attrs | tojson }}",
             "value_template": "{{ value_json.cpu_temp.temperature | float(0) }}",
             "device_class": "temperature",
@@ -50,8 +50,8 @@
             "p": "sensor",
             "name": "Memory Usage",
             "unit_of_measurement": "%",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
             "json_attributes_template": "{{ value_json.mem_usage.mem | tojson }}",
             "value_template": "{{ value_json.mem_usage.mem_usage | float(0) }}",
             "icon": "mdi:memory",
@@ -62,307 +62,223 @@
             "p": "sensor",
             "name": "Swap Usage",
             "unit_of_measurement": "%",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
             "json_attributes_template": "{{ value_json.mem_usage.swap | tojson }}",
             "value_template": "{{ value_json.mem_usage.swap_usage | float(0) }}",
             "icon": "mdi:memory",
             "unique_id": "debian_swap_usage",
             "state_class": "measurement"
         },
-        "debian_disk_smart_W0Q95TAW": {
-            "p": "binary_sensor",
-            "name": "disk W0Q95TAW SMART health",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_template": "{ value_json.disk_smart_W0Q95TAW.attrs | tojson }",
-            "value_template": "{'OFF' if value_json.disk_smart_W0Q95TAW.smart_passed|int(0) == 1 else 'ON'}",
-            "device_class": "problem",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_smart_W0Q95TAW"
-        },
-        "debian_disk_temp_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW temperature",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "value_template": "{ value_json.disk_smart_W0Q95TAW.temperature }",
-            "unit_of_measurement": "\u00b0C",
-            "device_class": "temperature",
-            "icon": "mdi:thermometer",
-            "unique_id": "debian_disk_temp_W0Q95TAW",
-            "state_class": "measurement"
-        },
-        "debian_disk_info_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW info",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/diskinfo",
-            "json_attributes_template": "{ value_json.W0Q95TAW | tojson }",
-            "value_template": "{ value_json.W0Q95TAW.model_name }",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_info_W0Q95TAW"
-        },
-        "debian_disk_write_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW write speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_W0Q95TAW.write_kbs | float(0) }}",
-            "unit_of_measurement": "kB/s",
-            "device_class": "data_rate",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_write_W0Q95TAW",
-            "state_class": "measurement"
-        },
-        "debian_disk_read_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW read speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_W0Q95TAW.read_kbs | float(0) }}",
-            "unit_of_measurement": "kB/s",
-            "device_class": "data_rate",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_read_W0Q95TAW",
-            "state_class": "measurement"
-        },
-        "debian_disk_util_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW utilization",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_W0Q95TAW.util | float(0) }}",
-            "unit_of_measurement": "%",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_util_W0Q95TAW",
-            "state_class": "measurement"
-        },
-        "debian_disk_usage_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW usage",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_template": "{ value_json.disk_usage_W0Q95TAW.attrs | tojson }",
-            "value_template": "{{ value_json.disk_usage_W0Q95TAW.usage_percent }}",
-            "unit_of_measurement": "%",
-            "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_usage_W0Q95TAW",
-            "state_class": "measurement"
-        },
-        "debian_disk_status_W0Q95TAW": {
-            "p": "sensor",
-            "name": "disk W0Q95TAW status",
-            "state_topic": "test/linux_ha_mqtt_debian/fast/disk_status_W0Q95TAW",
-            "value_template": "{{ value_json.disk_status_W0Q95TAW.status }}",
-            "icon": "mdi:power",
-            "unique_id": "debian_disk_status_W0Q95TAW"
-        },
-        "debian_disk_smart_L02139J006880": {
+        "debian_disk_smart_0023762053110": {
             "p": "binary_sensor",
             "name": "disk root SMART health",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_template": "{ value_json.disk_smart_L02139J006880.attrs | tojson }",
-            "value_template": "{'OFF' if value_json.disk_smart_L02139J006880.smart_passed|int(0) == 1 else 'ON'}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "json_attributes_template": "{{ value_json.disk_smart_0023762053110.attrs | tojson }}",
+            "value_template": "{{'OFF' if value_json.disk_smart_0023762053110.smart_passed|int(0) == 1 else 'ON'}}",
             "device_class": "problem",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_smart_L02139J006880"
+            "unique_id": "debian_disk_smart_0023762053110"
         },
-        "debian_disk_temp_L02139J006880": {
+        "debian_disk_temp_0023762053110": {
             "p": "sensor",
             "name": "disk root temperature",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "value_template": "{ value_json.disk_smart_L02139J006880.temperature }",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "value_template": "{{ value_json.disk_smart_0023762053110.temperature }}",
             "unit_of_measurement": "\u00b0C",
             "device_class": "temperature",
             "icon": "mdi:thermometer",
-            "unique_id": "debian_disk_temp_L02139J006880",
+            "unique_id": "debian_disk_temp_0023762053110",
             "state_class": "measurement"
         },
-        "debian_disk_info_L02139J006880": {
+        "debian_disk_info_0023762053110": {
             "p": "sensor",
             "name": "disk root info",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/diskinfo",
-            "json_attributes_template": "{ value_json.L02139J006880 | tojson }",
-            "value_template": "{ value_json.L02139J006880.model_name }",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/diskinfo",
+            "json_attributes_template": "{{ value_json.0023762053110 | tojson }}",
+            "value_template": "{{ value_json.0023762053110.model_name }}",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_info_L02139J006880"
+            "unique_id": "debian_disk_info_0023762053110"
         },
-        "debian_disk_write_L02139J006880": {
+        "debian_disk_write_0023762053110": {
             "p": "sensor",
             "name": "disk root write speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_L02139J006880.write_kbs | float(0) }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_0023762053110.write_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "device_class": "data_rate",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_write_L02139J006880",
+            "unique_id": "debian_disk_write_0023762053110",
             "state_class": "measurement"
         },
-        "debian_disk_read_L02139J006880": {
+        "debian_disk_read_0023762053110": {
             "p": "sensor",
             "name": "disk root read speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_L02139J006880.read_kbs | float(0) }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_0023762053110.read_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "device_class": "data_rate",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_read_L02139J006880",
+            "unique_id": "debian_disk_read_0023762053110",
             "state_class": "measurement"
         },
-        "debian_disk_util_L02139J006880": {
+        "debian_disk_util_0023762053110": {
             "p": "sensor",
             "name": "disk root utilization",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_L02139J006880.util | float(0) }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_0023762053110.util | float(0) }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_util_L02139J006880",
+            "unique_id": "debian_disk_util_0023762053110",
             "state_class": "measurement"
         },
-        "debian_disk_usage_L02139J006880": {
+        "debian_disk_usage_0023762053110": {
             "p": "sensor",
             "name": "disk root usage",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_template": "{ value_json.disk_usage_L02139J006880.attrs | tojson }",
-            "value_template": "{{ value_json.disk_usage_L02139J006880.usage_percent }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_template": "{{ value_json.disk_usage_0023762053110.attrs | tojson }}",
+            "value_template": "{{ value_json.disk_usage_0023762053110.usage_percent }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_usage_L02139J006880",
+            "unique_id": "debian_disk_usage_0023762053110",
             "state_class": "measurement"
         },
-        "debian_disk_status_L02139J006880": {
+        "debian_disk_status_0023762053110": {
             "p": "sensor",
             "name": "disk root status",
-            "state_topic": "test/linux_ha_mqtt_debian/fast/disk_status_L02139J006880",
-            "value_template": "{{ value_json.disk_status_L02139J006880.status }}",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_status_0023762053110.status }}",
             "icon": "mdi:power",
-            "unique_id": "debian_disk_status_L02139J006880"
+            "unique_id": "debian_disk_status_0023762053110"
         },
-        "debian_disk_smart_BTNH00220909512A": {
+        "debian_disk_smart_9VM861KX": {
             "p": "binary_sensor",
-            "name": "disk BTNH0022 SMART health",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/slow",
-            "json_attributes_template": "{ value_json.disk_smart_BTNH00220909512A.attrs | tojson }",
-            "value_template": "{'OFF' if value_json.disk_smart_BTNH00220909512A.smart_passed|int(0) == 1 else 'ON'}",
+            "name": "disk 9VM861KX SMART health",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "json_attributes_template": "{{ value_json.disk_smart_9VM861KX.attrs | tojson }}",
+            "value_template": "{{'OFF' if value_json.disk_smart_9VM861KX.smart_passed|int(0) == 1 else 'ON'}}",
             "device_class": "problem",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_smart_BTNH00220909512A"
+            "unique_id": "debian_disk_smart_9VM861KX"
         },
-        "debian_disk_temp_BTNH00220909512A": {
+        "debian_disk_temp_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 temperature",
-            "state_topic": "test/linux_ha_mqtt_debian/slow",
-            "value_template": "{ value_json.disk_smart_BTNH00220909512A.temperature }",
+            "name": "disk 9VM861KX temperature",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/slow",
+            "value_template": "{{ value_json.disk_smart_9VM861KX.temperature }}",
             "unit_of_measurement": "\u00b0C",
             "device_class": "temperature",
             "icon": "mdi:thermometer",
-            "unique_id": "debian_disk_temp_BTNH00220909512A",
+            "unique_id": "debian_disk_temp_9VM861KX",
             "state_class": "measurement"
         },
-        "debian_disk_info_BTNH00220909512A": {
+        "debian_disk_info_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 info",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/diskinfo",
-            "json_attributes_template": "{ value_json.BTNH00220909512A | tojson }",
-            "value_template": "{ value_json.BTNH00220909512A.model_name }",
+            "name": "disk 9VM861KX info",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/diskinfo",
+            "json_attributes_template": "{{ value_json.9VM861KX | tojson }}",
+            "value_template": "{{ value_json.9VM861KX.model_name }}",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_info_BTNH00220909512A"
+            "unique_id": "debian_disk_info_9VM861KX"
         },
-        "debian_disk_write_BTNH00220909512A": {
+        "debian_disk_write_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 write speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_BTNH00220909512A.write_kbs | float(0) }}",
+            "name": "disk 9VM861KX write speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_9VM861KX.write_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "device_class": "data_rate",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_write_BTNH00220909512A",
+            "unique_id": "debian_disk_write_9VM861KX",
             "state_class": "measurement"
         },
-        "debian_disk_read_BTNH00220909512A": {
+        "debian_disk_read_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 read speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_BTNH00220909512A.read_kbs | float(0) }}",
+            "name": "disk 9VM861KX read speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_9VM861KX.read_kbs | float(0) }}",
             "unit_of_measurement": "kB/s",
             "device_class": "data_rate",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_read_BTNH00220909512A",
+            "unique_id": "debian_disk_read_9VM861KX",
             "state_class": "measurement"
         },
-        "debian_disk_util_BTNH00220909512A": {
+        "debian_disk_util_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 utilization",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.disk_io_BTNH00220909512A.util | float(0) }}",
+            "name": "disk 9VM861KX utilization",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_io_9VM861KX.util | float(0) }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_util_BTNH00220909512A",
+            "unique_id": "debian_disk_util_9VM861KX",
             "state_class": "measurement"
         },
-        "debian_disk_usage_BTNH00220909512A": {
+        "debian_disk_usage_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 usage",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_topic": "test/linux_ha_mqtt_debian/fast",
-            "json_attributes_template": "{ value_json.disk_usage_BTNH00220909512A.attrs | tojson }",
-            "value_template": "{{ value_json.disk_usage_BTNH00220909512A.usage_percent }}",
+            "name": "disk 9VM861KX usage",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "json_attributes_template": "{{ value_json.disk_usage_9VM861KX.attrs | tojson }}",
+            "value_template": "{{ value_json.disk_usage_9VM861KX.usage_percent }}",
             "unit_of_measurement": "%",
             "icon": "mdi:harddisk",
-            "unique_id": "debian_disk_usage_BTNH00220909512A",
+            "unique_id": "debian_disk_usage_9VM861KX",
             "state_class": "measurement"
         },
-        "debian_disk_status_BTNH00220909512A": {
+        "debian_disk_status_9VM861KX": {
             "p": "sensor",
-            "name": "disk BTNH0022 status",
-            "state_topic": "test/linux_ha_mqtt_debian/fast/disk_status_BTNH00220909512A",
-            "value_template": "{{ value_json.disk_status_BTNH00220909512A.status }}",
+            "name": "disk 9VM861KX status",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.disk_status_9VM861KX.status }}",
             "icon": "mdi:power",
-            "unique_id": "debian_disk_status_BTNH00220909512A"
+            "unique_id": "debian_disk_status_9VM861KX"
         },
-        "debian_net_stats_enp6s0_rx": {
+        "debian_net_stats_lan_rx": {
             "p": "sensor",
-            "name": "enp6s0 Rx speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.net_stats_enp6s0.rx_speed | int(0) }}",
+            "name": "lan Rx speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.net_stats_lan.rx_speed | int(0) }}",
             "unit_of_measurement": "B/s",
             "device_class": "data_rate",
             "icon": "mdi:download",
-            "unique_id": "debian_net_stats_enp6s0_rx",
+            "unique_id": "debian_net_stats_lan_rx",
             "state_class": "measurement"
         },
-        "debian_net_stats_enp6s0_tx": {
+        "debian_net_stats_lan_tx": {
             "p": "sensor",
-            "name": "enp6s0 Tx speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.net_stats_enp6s0.tx_speed | int(0) }}",
+            "name": "lan Tx speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.net_stats_lan.tx_speed | int(0) }}",
             "unit_of_measurement": "B/s",
             "device_class": "data_rate",
             "icon": "mdi:upload",
-            "unique_id": "debian_net_stats_enp6s0_tx",
+            "unique_id": "debian_net_stats_lan_tx",
             "state_class": "measurement"
         },
-        "debian_net_stats_enp6s0_link_speed": {
+        "debian_net_stats_lan_link_speed": {
             "p": "sensor",
-            "name": "enp6s0 Link Speed",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.net_stats_enp6s0.link_speed | int(0) }}",
+            "name": "lan Link Speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.net_stats_lan.link_speed | int(0) }}",
             "unit_of_measurement": "Mbit/s",
             "suggested_display_precision": 0,
             "device_class": "data_rate",
             "icon": "mdi:speedometer",
-            "unique_id": "debian_net_stats_enp6s0_link_speed",
+            "unique_id": "debian_net_stats_lan_link_speed",
             "state_class": "measurement"
         },
-        "debian_net_stats_enp6s0_duplex": {
+        "debian_net_stats_lan_duplex": {
             "p": "sensor",
-            "name": "enp6s0 Duplex",
-            "state_topic": "test/linux_ha_mqtt_debian/fast",
-            "value_template": "{{ value_json.net_stats_enp6s0.duplex }}",
+            "name": "lan Duplex",
+            "state_topic": "homeassistant/linux_ha_mqtt_debian/fast",
+            "value_template": "{{ value_json.net_stats_lan.duplex }}",
             "icon": "mdi:network",
-            "unique_id": "debian_net_stats_enp6s0_duplex"
+            "unique_id": "debian_net_stats_lan_duplex"
         }
     }
 }

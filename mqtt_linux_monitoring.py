@@ -71,13 +71,18 @@ class LinuxSystemMonitor:
         self.fast_interval = int(get_env_var('FAST_INTERVAL', '10'))
         self.slow_interval = int(get_env_var('SLOW_INTERVAL', '30'))
         self.ha_discovery_prefix = get_env_var('HA_DISCOVERY_PREFIX', 'homeassistant')
-        
+        self.overwrite_device_id = get_env_var('OVERWRITE_DEVICE_ID', '')
 
         with open('/etc/hostname', 'r') as f:
             self.hostname = f.read().strip()
         self.mqtt_client_id = f"linux_mqtt_ha_on_{self.hostname}"
-        self.device_name = self.hostname
-        self.device_id = self.hostname.lower().replace(" ", "_")
+        if self.overwrite_device_id:
+            self.device_id = self.overwrite_device_id.lower().replace(" ", "_")
+            self.device_name = self.overwrite_device_id
+        else:
+            self.device_name = self.hostname
+        
+            self.device_id = self.hostname.lower().replace(" ", "_")
         # Dry run mode
         self.dry_run = False
         
@@ -223,7 +228,7 @@ class LinuxSystemMonitor:
             print(f"Error parsing iostat JSON output: {e}")
             return
 
-        self.fast_payload['cpu-avg'] = cpu_data
+        self.fast_payload['cpu_avg'] = cpu_data
         for serial, disk_path in self.disk_serial_mapping.items():
             if not disk_path:
                 continue
@@ -463,9 +468,9 @@ class LinuxSystemMonitor:
         """Get disk SMART data using JSON output from smartctl (accepts device path or serial)"""
         
         # Use smartctl with JSON output for comprehensive SMART data
-        cmd = ["smartctl", "-A", "-j", disk_path]
+        cmd = ["smartctl", "-A", "-H", "-j", disk_path]
         if self.disk_bridge_type.get(disk_path):
-            cmd= ["smartctl", "-A", "-j", "-d", self.disk_bridge_type[disk_path], disk_path]
+            cmd= ["smartctl", "-A", "-H", "-j", "-d", self.disk_bridge_type[disk_path], disk_path]
         output = self.run_command_accept_error(cmd)
         if not output:
             return {
@@ -686,8 +691,8 @@ class LinuxSystemMonitor:
                 "suggested_display_precision": 1,
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
-                "json_attributes_template": "{{ value_json.cpu-avg | tojson }}",
-                "value_template": "{{ 100 - (value_json.cpu-avg.idle | float(0)) }}",
+                "json_attributes_template": "{{ value_json.cpu_avg | tojson }}",
+                "value_template": "{{ 100 - (value_json.cpu_avg.idle | float(0)) }}",
                 "icon": "mdi:cpu-64-bit",
                 "unique_id": f"{self.device_id}_cpu_usage",
                 "state_class": "measurement"
@@ -752,8 +757,8 @@ class LinuxSystemMonitor:
                         "name": f"{disk_name} SMART health",
                         "state_topic": self.slow_topic,
                         "json_attributes_topic": self.slow_topic,
-                        "json_attributes_template": f"{{ value_json.disk_smart_{serial}.attrs | tojson }}",
-                        "value_template": f"{{'OFF' if value_json.disk_smart_{serial}.smart_passed|int(0) == 1 else 'ON'}}",
+                        "json_attributes_template": f"{{{{ value_json.disk_smart_{serial}.attrs | tojson }}}}",
+                        "value_template": f"{{{{'OFF' if value_json.disk_smart_{serial}.smart_passed|int(0) == 1 else 'ON'}}}}",
                         "device_class": "problem",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
@@ -763,7 +768,7 @@ class LinuxSystemMonitor:
                         "p": "sensor",
                         "name": f"{disk_name} temperature",
                         "state_topic": self.slow_topic,
-                        "value_template": f"{{ value_json.disk_smart_{serial}.temperature }}",
+                        "value_template": f"{{{{ value_json.disk_smart_{serial}.temperature }}}}",
                         "unit_of_measurement": "°C",
                         "device_class": "temperature",
                         "icon": "mdi:thermometer",
@@ -774,10 +779,10 @@ class LinuxSystemMonitor:
                     dev_discovery["cmps"][f"{self.device_id}_disk_info_{safe_serial}"] = {
                         "p": "sensor",
                         "name": f"{disk_name} info",
-                        "state_topic": self.fast_topic,
+                        "state_topic": self.disk_info_topic,
                         "json_attributes_topic": self.disk_info_topic,
-                        "json_attributes_template": f"{{ value_json.{serial} | tojson }}",
-                        "value_template": f"{{ value_json.{serial}.model_name }}",
+                        "json_attributes_template": f"{{{{ value_json['{serial}'] | tojson }}}}",
+                        "value_template": f"{{{{ value_json['{serial}'].model_name }}}}",
                         # "device_class": "diagnostic",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
@@ -821,7 +826,7 @@ class LinuxSystemMonitor:
                     "name": f"{disk_name} usage",
                     "state_topic": self.fast_topic,
                     "json_attributes_topic": self.fast_topic,
-                    "json_attributes_template": f"{{ value_json.disk_usage_{serial}.attrs | tojson }}",
+                    "json_attributes_template": f"{{{{ value_json.disk_usage_{serial}.attrs | tojson }}}}",
                     "value_template": f"{{{{ value_json.disk_usage_{serial}.usage_percent }}}}",
                     "unit_of_measurement": "%",
                     "icon": "mdi:harddisk",
@@ -832,7 +837,7 @@ class LinuxSystemMonitor:
                 dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} status",
-                    "state_topic": f"{self.fast_topic}/disk_status_{serial}",
+                    "state_topic": self.fast_topic,
                     "value_template": f"{{{{ value_json.disk_status_{serial}.status }}}}",
                     "icon": "mdi:power",
                     "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
