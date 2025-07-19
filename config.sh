@@ -31,10 +31,10 @@ install_dependencies() {
     echo "Installing system dependencies..."
     
     # Update package list
-    apt-get update
+    sudo apt-get update
     
     # Install required packages
-    apt-get install smartmontools lm-sensors sysstat hdparm python3-dotenv
+    sudo apt-get install smartmontools lm-sensors sysstat hdparm python3-dotenv
     
     # Install Python MQTT library
     # if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
@@ -193,7 +193,8 @@ update_script() {
     echo "Updating Linux MQTT monitoring script..."
     echo "========================================"
     echo "Pulling latest changes from repository..."
-    git -C "$SCRIPT_DIR" pull "$REPO_URL" || {
+    cd "$SCRIPT_DIR"
+    git pull || {
         echo "Error: Failed to update from repository"
         exit 1
     }

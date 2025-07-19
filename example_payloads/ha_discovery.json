@@ -1,0 +1,380 @@
+{
+    "dev": {
+        "ids": "test",
+        "name": "test",
+        "sw_version": "Debian GNU/Linux 12 (bookworm)",
+        "model": "AMD Ryzen 5 8600G w/ Radeon 760M Graphics"
+    },
+    "o": {
+        "name": "linux_mqtt_ha",
+        "sw": "1.1",
+        "url": "https://github.com/susembed/linux_mqtt_ha"
+    },
+    "cmps": {
+        "test_last_boot": {
+            "p": "sensor",
+            "name": "Last Boot",
+            "icon": "mdi:clock",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/one_time",
+            "value_template": "{{ (now() | as_timestamp - (value_json.uptime |float(0))) |round(0) | as_datetime |as_local}}",
+            "device_class": "timestamp",
+            "unique_id": "test_last_boot"
+        },
+        "test_cpu_usage": {
+            "p": "sensor",
+            "name": "CPU Usage",
+            "unit_of_measurement": "%",
+            "suggested_display_precision": 1,
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.cpu_avg | tojson }}",
+            "value_template": "{{ 100 - (value_json.cpu_avg.idle | float(0)) }}",
+            "icon": "mdi:cpu-64-bit",
+            "unique_id": "test_cpu_usage",
+            "state_class": "measurement"
+        },
+        "test_cpu_freq": {
+            "p": "sensor",
+            "name": "CPU Frequency",
+            "unit_of_measurement": "MHz",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.cpu_freq.attrs | tojson }}",
+            "value_template": "{{ value_json.cpu_freq.avg_freq | float(0) }}",
+            "icon": "mdi:cpu-64-bit",
+            "unique_id": "test_cpu_freq",
+            "state_class": "measurement"
+        },
+        "test_cpu_temp": {
+            "p": "sensor",
+            "name": "CPU Temperature",
+            "unit_of_measurement": "\u00b0C",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.cpu_temp.attrs | tojson }}",
+            "value_template": "{{ value_json.cpu_temp.temperature | float(0) }}",
+            "device_class": "temperature",
+            "icon": "mdi:thermometer",
+            "unique_id": "test_cpu_temp",
+            "state_class": "measurement"
+        },
+        "test_memory_usage": {
+            "p": "sensor",
+            "name": "Memory Usage",
+            "unit_of_measurement": "%",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.mem_usage.mem | tojson }}",
+            "value_template": "{{ value_json.mem_usage.mem_usage | float(0) }}",
+            "icon": "mdi:memory",
+            "unique_id": "test_memory_usage",
+            "state_class": "measurement"
+        },
+        "test_swap_usage": {
+            "p": "sensor",
+            "name": "Swap Usage",
+            "unit_of_measurement": "%",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.mem_usage.swap | tojson }}",
+            "value_template": "{{ value_json.mem_usage.swap_usage | float(0) }}",
+            "icon": "mdi:memory",
+            "unique_id": "test_swap_usage",
+            "state_class": "measurement"
+        },
+        "test_disk_smart_W0Q95TAW": {
+            "p": "binary_sensor",
+            "name": "disk W0Q95TAW SMART health",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_template": "{{ value_json.disk_smart_W0Q95TAW.attrs | tojson }}",
+            "value_template": "{{'OFF' if value_json.disk_smart_W0Q95TAW.smart_passed|int(0) == 1 else 'ON'}}",
+            "device_class": "problem",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_smart_W0Q95TAW"
+        },
+        "test_disk_temp_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW temperature",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "value_template": "{{ value_json.disk_smart_W0Q95TAW.temperature }}",
+            "unit_of_measurement": "\u00b0C",
+            "device_class": "temperature",
+            "icon": "mdi:thermometer",
+            "unique_id": "test_disk_temp_W0Q95TAW",
+            "state_class": "measurement"
+        },
+        "test_disk_info_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW info",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_template": "{{ value_json['W0Q95TAW'] | tojson }}",
+            "value_template": "{{ value_json['W0Q95TAW'].model_name }}",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_info_W0Q95TAW"
+        },
+        "test_disk_write_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW write speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_W0Q95TAW.write_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_write_W0Q95TAW",
+            "state_class": "measurement"
+        },
+        "test_disk_read_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW read speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_W0Q95TAW.read_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_read_W0Q95TAW",
+            "state_class": "measurement"
+        },
+        "test_disk_util_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW utilization",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_W0Q95TAW.util | float(0) }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_util_W0Q95TAW",
+            "state_class": "measurement"
+        },
+        "test_disk_usage_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW usage",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.disk_usage_W0Q95TAW.attrs | tojson }}",
+            "value_template": "{{ value_json.disk_usage_W0Q95TAW.usage_percent }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_usage_W0Q95TAW",
+            "state_class": "measurement"
+        },
+        "test_disk_status_W0Q95TAW": {
+            "p": "sensor",
+            "name": "disk W0Q95TAW status",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_status_W0Q95TAW.status }}",
+            "icon": "mdi:power",
+            "unique_id": "test_disk_status_W0Q95TAW"
+        },
+        "test_disk_smart_L02139J006880": {
+            "p": "binary_sensor",
+            "name": "disk root SMART health",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_template": "{{ value_json.disk_smart_L02139J006880.attrs | tojson }}",
+            "value_template": "{{'OFF' if value_json.disk_smart_L02139J006880.smart_passed|int(0) == 1 else 'ON'}}",
+            "device_class": "problem",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_smart_L02139J006880"
+        },
+        "test_disk_temp_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root temperature",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "value_template": "{{ value_json.disk_smart_L02139J006880.temperature }}",
+            "unit_of_measurement": "\u00b0C",
+            "device_class": "temperature",
+            "icon": "mdi:thermometer",
+            "unique_id": "test_disk_temp_L02139J006880",
+            "state_class": "measurement"
+        },
+        "test_disk_info_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root info",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_template": "{{ value_json['L02139J006880'] | tojson }}",
+            "value_template": "{{ value_json['L02139J006880'].model_name }}",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_info_L02139J006880"
+        },
+        "test_disk_write_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root write speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_L02139J006880.write_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_write_L02139J006880",
+            "state_class": "measurement"
+        },
+        "test_disk_read_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root read speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_L02139J006880.read_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_read_L02139J006880",
+            "state_class": "measurement"
+        },
+        "test_disk_util_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root utilization",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_L02139J006880.util | float(0) }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_util_L02139J006880",
+            "state_class": "measurement"
+        },
+        "test_disk_usage_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root usage",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.disk_usage_L02139J006880.attrs | tojson }}",
+            "value_template": "{{ value_json.disk_usage_L02139J006880.usage_percent }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_usage_L02139J006880",
+            "state_class": "measurement"
+        },
+        "test_disk_status_L02139J006880": {
+            "p": "sensor",
+            "name": "disk root status",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_status_L02139J006880.status }}",
+            "icon": "mdi:power",
+            "unique_id": "test_disk_status_L02139J006880"
+        },
+        "test_disk_smart_BTNH00220909512A": {
+            "p": "binary_sensor",
+            "name": "disk BTNH0022 SMART health",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "json_attributes_template": "{{ value_json.disk_smart_BTNH00220909512A.attrs | tojson }}",
+            "value_template": "{{'OFF' if value_json.disk_smart_BTNH00220909512A.smart_passed|int(0) == 1 else 'ON'}}",
+            "device_class": "problem",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_smart_BTNH00220909512A"
+        },
+        "test_disk_temp_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 temperature",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/slow",
+            "value_template": "{{ value_json.disk_smart_BTNH00220909512A.temperature }}",
+            "unit_of_measurement": "\u00b0C",
+            "device_class": "temperature",
+            "icon": "mdi:thermometer",
+            "unique_id": "test_disk_temp_BTNH00220909512A",
+            "state_class": "measurement"
+        },
+        "test_disk_info_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 info",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/diskinfo",
+            "json_attributes_template": "{{ value_json['BTNH00220909512A'] | tojson }}",
+            "value_template": "{{ value_json['BTNH00220909512A'].model_name }}",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_info_BTNH00220909512A"
+        },
+        "test_disk_write_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 write speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_BTNH00220909512A.write_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_write_BTNH00220909512A",
+            "state_class": "measurement"
+        },
+        "test_disk_read_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 read speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_BTNH00220909512A.read_kbs | float(0) }}",
+            "unit_of_measurement": "kB/s",
+            "device_class": "data_rate",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_read_BTNH00220909512A",
+            "state_class": "measurement"
+        },
+        "test_disk_util_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 utilization",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_io_BTNH00220909512A.util | float(0) }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_util_BTNH00220909512A",
+            "state_class": "measurement"
+        },
+        "test_disk_usage_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 usage",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "json_attributes_template": "{{ value_json.disk_usage_BTNH00220909512A.attrs | tojson }}",
+            "value_template": "{{ value_json.disk_usage_BTNH00220909512A.usage_percent }}",
+            "unit_of_measurement": "%",
+            "icon": "mdi:harddisk",
+            "unique_id": "test_disk_usage_BTNH00220909512A",
+            "state_class": "measurement"
+        },
+        "test_disk_status_BTNH00220909512A": {
+            "p": "sensor",
+            "name": "disk BTNH0022 status",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.disk_status_BTNH00220909512A.status }}",
+            "icon": "mdi:power",
+            "unique_id": "test_disk_status_BTNH00220909512A"
+        },
+        "test_net_stats_enp6s0_rx": {
+            "p": "sensor",
+            "name": "enp6s0 Rx speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.net_stats_enp6s0.rx_speed | int(0) }}",
+            "unit_of_measurement": "B/s",
+            "device_class": "data_rate",
+            "icon": "mdi:download",
+            "unique_id": "test_net_stats_enp6s0_rx",
+            "state_class": "measurement"
+        },
+        "test_net_stats_enp6s0_tx": {
+            "p": "sensor",
+            "name": "enp6s0 Tx speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.net_stats_enp6s0.tx_speed | int(0) }}",
+            "unit_of_measurement": "B/s",
+            "device_class": "data_rate",
+            "icon": "mdi:upload",
+            "unique_id": "test_net_stats_enp6s0_tx",
+            "state_class": "measurement"
+        },
+        "test_net_stats_enp6s0_link_speed": {
+            "p": "sensor",
+            "name": "enp6s0 Link Speed",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.net_stats_enp6s0.link_speed | int(0) }}",
+            "unit_of_measurement": "Mbit/s",
+            "suggested_display_precision": 0,
+            "device_class": "data_rate",
+            "icon": "mdi:speedometer",
+            "unique_id": "test_net_stats_enp6s0_link_speed",
+            "state_class": "measurement"
+        },
+        "test_net_stats_enp6s0_duplex": {
+            "p": "sensor",
+            "name": "enp6s0 Duplex",
+            "state_topic": "homeassistant/linux_ha_mqtt_test/fast",
+            "value_template": "{{ value_json.net_stats_enp6s0.duplex }}",
+            "icon": "mdi:network",
+            "unique_id": "test_net_stats_enp6s0_duplex"
+        }
+    }
+}
