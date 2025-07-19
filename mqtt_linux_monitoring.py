@@ -701,7 +701,7 @@ class LinuxSystemMonitor:
             },
             "o": {
                 "name": "linux_mqtt_ha",
-                "sw": "1.1",
+                "sw": "2.0",
                 "url": "https://github.com/susembed/linux_mqtt_ha"
             },
             "cmps": {}
