@@ -7,14 +7,14 @@
         }
     },
     "mem_usage": {
-        "mem_usage": 39.0,
+        "mem_usage": 26.3,
         "mem": {
             "total": 15807672320,
-            "used": 6164844544,
-            "free": 7173910528,
-            "shared": 66064384,
-            "buff_cache": 2849382400,
-            "available": 9642827776
+            "used": 4163977216,
+            "free": 10009722880,
+            "shared": 30244864,
+            "buff_cache": 1968562176,
+            "available": 11643695104
         },
         "swap_usage": 0.0,
         "swap": {
@@ -23,13 +23,13 @@
             "free": 8589930496
         }
     },
-    "cpu-avg": {
-        "user": 1.63,
+    "cpu_avg": {
+        "user": 0.23,
         "nice": 0.0,
-        "system": 1.19,
-        "iowait": 0.0,
+        "system": 0.08,
+        "iowait": 0.01,
         "steal": 0.0,
-        "idle": 97.18
+        "idle": 99.67
     },
     "disk_io_W0Q95TAW": {
         "read_kbs": 0.0,
@@ -38,17 +38,37 @@
     },
     "disk_io_L02139J006880": {
         "read_kbs": 0.0,
-        "write_kbs": 4.4,
-        "util": 0.0
+        "write_kbs": 35.6,
+        "util": 0.08
     },
     "disk_io_BTNH00220909512A": {
         "read_kbs": 0.0,
         "write_kbs": 0.0,
         "util": 0.0
     },
+    "cpu_freq": {
+        "avg_freq": 1049,
+        "attrs": {
+            "cores": [
+                2999,
+                400,
+                400,
+                400,
+                2999,
+                400,
+                400,
+                400,
+                2999,
+                400,
+                400,
+                400
+            ],
+            "count": 12
+        }
+    },
     "net_stats_enp6s0": {
-        "rx_speed": 408,
-        "tx_speed": 8441,
+        "rx_speed": 1379,
+        "tx_speed": 1678,
         "link_speed": 1000,
         "duplex": "full"
     },
@@ -65,12 +85,12 @@
         }
     },
     "disk_usage_L02139J006880": {
-        "usage_percent": 44.0,
+        "usage_percent": 43.98,
         "attrs": {
             "mount_point": "/",
             "total": 123878612992,
-            "used": 51719057408,
-            "free": 65819545600,
+            "used": 51694632960,
+            "free": 65843970048,
             "fstype": "ext4",
             "device_name": "sdb2",
             "total_size": 126464724480

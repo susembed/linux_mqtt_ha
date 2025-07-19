@@ -36,11 +36,11 @@ class LinuxSystemMonitor:
         def get_env_var(key: str, default: str = "") -> str:
             """Safely get environment variable with fallback to default"""
             value = dotenv.get_key('.env', key)
-            if value is None:
-                print(f"Warning: Key {key} not found in .env, using default: '{default}'")
-                return default
-            return value
-        
+            if value is not None:
+                print(f"Loaded from .env: {key} = '{value}'")
+                return value
+            return default
+
         # Configuration - Load from environment variables with fallbacks
         self.mqtt_broker = get_env_var('MQTT_BROKER', 'localhost')
         self.mqtt_port = int(get_env_var('MQTT_PORT', '1883'))
@@ -102,6 +102,7 @@ class LinuxSystemMonitor:
         self.fast_payload = {}
         self.slow_payload = {}
         self.disk_info_payload = {}
+        self.cpu_core_count = None
 
         self.slow_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/slow"  
         self.fast_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/fast"  
@@ -335,7 +336,32 @@ class LinuxSystemMonitor:
                     "error": "No temperature sensors found"
                 }
             }
-    
+    def update_cpu_freq(self) -> None:
+        cores_freq = []
+        for core in range(0, self.cpu_core_count): 
+            with open(f'/sys/devices/system/cpu/cpu{core}/cpufreq/scaling_cur_freq', 'r') as f:
+                try:
+                    freq = int(f.read().strip()) / 1000.0  # Convert to MHz
+                    cores_freq.append(int(freq))
+                except ValueError:
+                    cores_freq.append(0.0)
+        if cores_freq:
+            self.fast_payload['cpu_freq'] = {
+                "avg_freq": int(sum(cores_freq) / len(cores_freq)),
+                "attrs": {
+                    "cores": cores_freq,
+                    "count": len(cores_freq)
+                }
+            }
+        else:
+            self.fast_payload['cpu_freq'] = {
+                "avg_freq": 0,
+                "attrs": {
+                    "cores": [],
+                    "count": 0
+                }
+            }
+
     def get_memory_usage(self) -> Dict:
         """Get memory usage data by parsing free command output"""
         # Use free command with bytes output for precise values
@@ -643,6 +669,15 @@ class LinuxSystemMonitor:
         return self.run_command(['uname', '-o'])
     def get_hardware_info(self) -> str:
         """Get CPU information from /proc/cpuinfo"""
+        """Update CPU frequency information"""
+        if self.cpu_core_count is None:
+            for i in range(0, 32):  # Check up to 32 cores
+                cpu_path = f'/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_cur_freq'
+                if (not os.path.exists(cpu_path) or i==32):
+                    self.cpu_core_count = i
+                    print(f"Detected {self.cpu_core_count} CPU core(s)")
+                    break
+        
         cpu_name = "Unknown CPU"
         with open('/proc/cpuinfo') as f:
             for line in f:
@@ -676,7 +711,7 @@ class LinuxSystemMonitor:
             self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
             dev_discovery["cmps"][f"{self.device_id}_last_boot"] = {
                 "p": "sensor",
-                "name": "Last Boot",
+                "name": "Last boot",
                 "icon":"mdi:clock",
                 "state_topic": self.one_time_topic,
                 "value_template":"{{ (now() | as_timestamp - (value_json.uptime |float(0))) |round(0) | as_datetime |as_local}}",
@@ -686,7 +721,7 @@ class LinuxSystemMonitor:
         if "cpu_usage" not in self.ignore_sensors:
             dev_discovery["cmps"][f"{self.device_id}_cpu_usage"] = {
                 "p": "sensor",
-                "name": "CPU Usage",
+                "name": "CPU usage",
                 "unit_of_measurement": "%",
                 "suggested_display_precision": 1,
                 "state_topic": self.fast_topic,
@@ -697,10 +732,24 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_cpu_usage",
                 "state_class": "measurement"
             }
+        if "cpu_freq" not in self.ignore_sensors:
+            dev_discovery["cmps"][f"{self.device_id}_cpu_freq"] = {
+                "p": "sensor",
+                "name": "CPU frequency",
+                "unit_of_measurement": "MHz",
+                "suggested_display_precision": 1,
+                "state_topic": self.fast_topic,
+                "json_attributes_topic": self.fast_topic,
+                "json_attributes_template": "{{ value_json.cpu_freq.attrs | tojson }}",
+                "value_template": "{{ value_json.cpu_freq.avg_freq | float(0) }}",
+                "icon": "mdi:cpu-64-bit",
+                "unique_id": f"{self.device_id}_cpu_freq",
+                "state_class": "measurement"
+            }
         if "cpu_temp" not in self.ignore_sensors:
             dev_discovery["cmps"][f"{self.device_id}_cpu_temp"] = {
                 "p": "sensor",
-                "name": "CPU Temperature",
+                "name": "CPU temperature",
                 "unit_of_measurement": "°C",
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
@@ -715,7 +764,7 @@ class LinuxSystemMonitor:
             if "ram_usage" not in self.ignore_sensors:
                 dev_discovery["cmps"][f"{self.device_id}_memory_usage"] = {
                     "p": "sensor",
-                    "name": "Memory Usage",
+                    "name": "Memory usage",
                     "unit_of_measurement": "%",
                     "state_topic": self.fast_topic,
                     "json_attributes_topic": self.fast_topic,
@@ -728,7 +777,7 @@ class LinuxSystemMonitor:
             if "swap_usage" not in self.ignore_sensors:
                 dev_discovery["cmps"][f"{self.device_id}_swap_usage"] = {
                     "p": "sensor",
-                    "name": "Swap Usage",
+                    "name": "Swap usage",
                     "unit_of_measurement": "%",
                     "state_topic": self.fast_topic,
                     "json_attributes_topic": self.fast_topic,
@@ -873,7 +922,7 @@ class LinuxSystemMonitor:
                 if "net_link_speed" not in self.ignore_sensors:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
                         "p": "sensor",
-                        "name": f"{if_name} Link Speed",
+                        "name": f"{if_name} link speed",
                         "state_topic": self.fast_topic,
                         "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.link_speed | int(0) }}}}", 
                         "unit_of_measurement": "Mbit/s",
@@ -886,7 +935,7 @@ class LinuxSystemMonitor:
                 if "net_duplex" not in self.ignore_sensors:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_duplex"] = {
                         "p": "sensor",
-                        "name": f"{if_name} Duplex",
+                        "name": f"{if_name} duplex",
                         "state_topic": self.fast_topic,
                         "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.duplex }}}}",
                         "icon": "mdi:network",
@@ -988,7 +1037,7 @@ class LinuxSystemMonitor:
                 continue
         # Get all iostat data in one call (CPU + all disks)
         self.update_iostat_data()
-
+        self.update_cpu_freq()
         self.update_network_sensors()
         self.update_disk_usage()  # Update disk usage statistics
         for serial, disk_path in self.disk_serial_mapping.items():
