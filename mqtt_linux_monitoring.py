@@ -714,7 +714,7 @@ class LinuxSystemMonitor:
                 "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json.script | tojson }}",
                 "value_template": "{{'ON' if value_json.script.last_cycle_execution_time|float(0) else 'OFF'}}",
-                "off-delay": f"{self.slow_interval * 3}",
+                "off_delay": self.fast_interval * 2,
                 "icon": "mdi:monitor-dashboard",
                 "unique_id": f"{self.device_id}_monitoring",
             }
