@@ -8,6 +8,7 @@ Publishes to MQTT broker with Home Assistant autodiscovery
 # TODO:
 # - Auto detect unsupported SMART before create sensors in discovery
 # - Add docker container monitoring
+# - Add option to set discovery to persistent and fixed disks list
 import json
 import time
 import subprocess
