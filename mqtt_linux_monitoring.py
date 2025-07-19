@@ -706,7 +706,15 @@ class LinuxSystemMonitor:
             },
             "cmps": {}
         }
-
+        if "monitoring" not in self.ignore_sensors:
+            dev_discovery["cmps"][f"{self.device_id}_monitoring"] = {
+                "p": "binary_sensor",
+                "name": "monitoring status",
+                "state_topic": self.fast_topic,
+                "value_template": "ON",
+                "icon": "mdi:monitor-dashboard",
+                "unique_id": f"{self.device_id}_monitoring",
+            }
         if "last_boot" not in self.ignore_sensors:
             self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
             dev_discovery["cmps"][f"{self.device_id}_last_boot"] = {
