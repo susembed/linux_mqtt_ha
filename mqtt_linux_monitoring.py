@@ -711,7 +711,10 @@ class LinuxSystemMonitor:
                 "p": "binary_sensor",
                 "name": "monitoring status",
                 "state_topic": self.fast_topic,
-                "value_template": "ON",
+                "json_attributes_topic": self.fast_topic,
+                "json_attributes_template": "{{ value_json.script | tojson }}",
+                "value_template": "{{'ON' if value_json.script.last_cycle_execution_time|float(0) else 'OFF'}}",
+                "off-delay": f"{self.slow_interval * 3}",
                 "icon": "mdi:monitor-dashboard",
                 "unique_id": f"{self.device_id}_monitoring",
             }
@@ -745,7 +748,7 @@ class LinuxSystemMonitor:
                 "p": "sensor",
                 "name": "CPU frequency",
                 "unit_of_measurement": "MHz",
-                "suggested_display_precision": 1,
+                "suggested_display_precision": 0,
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json.cpu_freq.attrs | tojson }}",
@@ -1062,6 +1065,7 @@ class LinuxSystemMonitor:
     
     def run(self, dry_run: bool = False):
         """Main monitoring loop"""
+        last_execution = float(time.time())
         self.dry_run = dry_run
         
         print(f"Starting Linux System Monitor for {self.device_name}")
@@ -1069,15 +1073,9 @@ class LinuxSystemMonitor:
         
         # Setup MQTT connection
         self.setup_mqtt()
-        
-        # Test MQTT connectivity before proceeding
-        # if not self.dry_run and not self.test_mqtt_connectivity():
-        #     print("WARNING: Cannot connect to MQTT broker. Continuing anyway...")
-        
         # Get OS's root partition block device
         self.root_block = self.run_command(["findmnt", "-n", "-o", "SOURCE", "/"])
-        # Remove partition number - handle different storage device naming conventions
-        # sda1 -> sda, mmcblk0p1 -> mmcblk0, nvme0n1p1 -> nvme0n1
+        # Remove partition number - handle different storage device naming conventions# sda1 -> sda, mmcblk0p1 -> mmcblk0
         self.root_disk = re.sub(r'(p\d+|\d+)$', '', self.root_block)
         print(f"Root disk: {self.root_disk}")
         # Update disk mapping, this also update discovery
@@ -1101,8 +1099,12 @@ class LinuxSystemMonitor:
         
         # Main monitoring loop
         while True:
+            self.fast_payload["script"] = {
+                "last_cycle_execution_time": (float(time.time()) - last_execution if last_execution else 0),
+                "interval": self.fast_interval,
+            }
             current_time = int(time.time())
-            
+            last_execution = float(time.time())
             # Check if it's time for slow sensors update
             if current_time - self.last_slow_update >= self.slow_interval:
                 self.publish_slow_sensors()
@@ -1110,7 +1112,6 @@ class LinuxSystemMonitor:
             # Publish fast sensors (includes built-in sleep via iostat)
             self.publish_fast_sensors()
             self.update_disk_mapping()  # Update disk mapping if needed
-            
             # No need for sleep here as iostat already waits fast_interval seconds
     
     def update_disk_mapping(self):
