@@ -6,10 +6,7 @@ Monitors: CPU usage/temp, System load, Memory, Disk SMART, Disk I/O
 Publishes to MQTT broker with Home Assistant autodiscovery
 """
 # TODO:
-# - Add connectitvity sensor with off-delay
-# - Auto dectect unsported SMART before create sensors in discovery 
-# - combine payload for multiple sensors into one MQTT message
-# - Add CPU frequency monitoring
+# - Auto detect unsupported SMART before create sensors in discovery
 # - Add docker container monitoring
 import json
 import time
@@ -438,18 +435,41 @@ class LinuxSystemMonitor:
             }
         }
 
-    def get_disk_status(self, disk_path: str) -> Dict:
-        """Get disk power status using hdparm (accepts device path or serial)"""
+    # def get_disk_status(self, disk_path: str) -> Dict:
+    #     """Get disk power status using hdparm (accepts device path or serial)"""
         
-        output = self.run_command(["hdparm", "-C", disk_path])
-        if output:
-            for line in output.split('\n'):
-                if "drive state is:" in line:
-                    # Extract status after "drive state is:"
-                    status = line.split("drive state is:")[1].strip()
-                    return {"status": status}
+    #     output = self.run_command(["hdparm", "-C", disk_path])
+    #     if output:
+    #         for line in output.split('\n'):
+    #             if "drive state is:" in line:
+    #                 # Extract status after "drive state is:"
+    #                 status = line.split("drive state is:")[1].strip()
+    #                 return {"status": status}
         
-        return {"status": "unknown", "error": "Failed to get status"}
+    #     return {"status": "unknown", "error": "Failed to get status"}
+    def update_disk_status(self) -> Dict[str, Dict]:
+        """Get disk power status for multiple disks using hdparm in batch"""
+        disk_paths = self.disk_path_mapping.keys()
+        if not disk_paths:
+            return
+
+        output = self.run_command(["hdparm", "-C"] + list(disk_paths))
+        if not output:
+            return
+        current_device = None
+        for line in output.split('\n'):
+            line = line.strip()
+            
+            # Check if this line contains a device path
+            if line.endswith(':') and any(line.startswith(path) for path in disk_paths):
+                current_device = line.rstrip(':')
+            elif "drive state is:" in line and current_device:
+                # Extract status after "drive state is:"
+                status = line.split("drive state is:")[1].strip()
+                self.fast_payload[f"disk_status_{self.disk_path_mapping.get(current_device, 'unknown')}"] = {"status": status}
+
+                current_device = None
+        return
 
     def update_disk_usage(self) :
         """Get disk usage statistics using lsblk with JSON output (accepts device path)"""
@@ -713,7 +733,8 @@ class LinuxSystemMonitor:
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json.script | tojson }}",
-                "value_template": "{{'ON' if value_json.script.last_cycle_execution_time|float(0) else 'OFF'}}",
+                "value_template": "ON",
+                "device_class": "running",
                 "off_delay": self.fast_interval * 2,
                 "icon": "mdi:monitor-dashboard",
                 "unique_id": f"{self.device_id}_monitoring",
@@ -963,16 +984,6 @@ class LinuxSystemMonitor:
                 uptime_seconds = float(f.read().split()[0])
             self.one_time_payload["uptime"] = uptime_seconds
         self.mqtt_publish(self.one_time_topic, json.dumps(self.one_time_payload), True)
-
-    def publish_slow_sensors(self):
-        """Publish slow interval sensors (SMART data)"""
-        # print("Publishing slow interval sensors (SMART data)...")
-
-        for serial, disk_path in self.disk_serial_mapping.items():
-            if serial not in self.ignore_disks_for_smart:
-                if ("disk_smart" not in self.ignore_sensors):
-                    self.slow_payload[f"disk_smart_{serial}"] = self.get_disk_smart(disk_path)
-        self.mqtt_publish(self.slow_topic, json.dumps(self.slow_payload))
     def publish_disk_info(self):
         """Publish disk info and status sensors"""
         print("Publishing disk info and status sensors...")
@@ -1023,6 +1034,16 @@ class LinuxSystemMonitor:
             except Exception as e:
                 print(f"Error reading network stats for {ifname}: {e}")
                 continue
+
+    def publish_slow_sensors(self):
+        """Publish slow interval sensors (SMART data)"""
+        # print("Publishing slow interval sensors (SMART data)...")
+
+        for serial, disk_path in self.disk_serial_mapping.items():
+            if serial not in self.ignore_disks_for_smart:
+                if ("disk_smart" not in self.ignore_sensors):
+                    self.slow_payload[f"disk_smart_{serial}"] = self.get_disk_smart(disk_path)
+        self.mqtt_publish(self.slow_topic, json.dumps(self.slow_payload))
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
         # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting iostat data ({self.fast_interval}s average)...")
@@ -1051,10 +1072,11 @@ class LinuxSystemMonitor:
         self.update_cpu_freq()
         self.update_network_sensors()
         self.update_disk_usage()  # Update disk usage statistics
-        for serial, disk_path in self.disk_serial_mapping.items():
-            if serial not in self.ignore_disks_for_info:
-                if  ("disk_status" not in self.ignore_sensors):
-                    self.fast_payload[f"disk_status_{serial}"] = self.get_disk_status(disk_path)
+        self.update_disk_status()
+        # for serial, disk_path in self.disk_serial_mapping.items():
+        #     if serial not in self.ignore_disks_for_info:
+        #         if  ("disk_status" not in self.ignore_sensors):
+        #             self.fast_payload[f"disk_status_{serial}"] = self.get_disk_status(disk_path)
         # Publish fast sensors payload
         self.mqtt_publish(self.fast_topic, json.dumps(self.fast_payload))
     def cleanup(self, signum=None, frame=None):
@@ -1112,8 +1134,6 @@ class LinuxSystemMonitor:
             # Publish fast sensors (includes built-in sleep via iostat)
             self.publish_fast_sensors()
             self.update_disk_mapping()  # Update disk mapping if needed
-            # No need for sleep here as iostat already waits fast_interval seconds
-    
     def update_disk_mapping(self):
         """Update disk serial to device path mapping using lsblk JSON output"""
         output = self.run_command(["lsblk", "-d", "-o", "NAME,TRAN,SERIAL,SIZE,MODEL", "-J", "--tree"])
