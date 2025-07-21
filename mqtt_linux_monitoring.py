@@ -26,11 +26,11 @@ try:
 except ImportError:
     print("Warning: python-dotenv not installed. Install with: pip install python-dotenv")
     sys.exit(1)
-try:
-    import requests_unixsocket
-except ImportError:
-    print("Warning: requests_unixsocket not installed. Install with: pip install requests-unixsocket")
-    sys.exit(1)
+# try:
+#     import requests_unixsocket
+# except ImportError:
+#     print("Warning: requests_unixsocket not installed. Install with: pip install requests-unixsocket")
+#     sys.exit(1)
 
 class LinuxSystemMonitor:
     def __init__(self):
@@ -442,44 +442,44 @@ class LinuxSystemMonitor:
                 "free": 0,
             }
         }
-    def update_container_stats(self) :
-        """Get Docker container stats using requests_unixsocket"""
-        try:
-            session = requests_unixsocket.Session()
-            for container_id in self.container_ids:
-                response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=true')
-                containers = response.json()
+    # def update_container_stats(self) :
+    #     """Get Docker container stats using requests_unixsocket"""
+    #     try:
+    #         session = requests_unixsocket.Session()
+    #         for container_id in self.container_ids:
+    #             response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=true')
+    #             containers = response.json()
 
-                for container in containers:
-                    container_id = container['Id']
-                    container_name = container['Names'][0].lstrip('/')
+    #             for container in containers:
+    #                 container_id = container['Id']
+    #                 container_name = container['Names'][0].lstrip('/')
                 
-                # Get stats for the container
-                stats_response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=false')
-                stats = stats_response.json()
+    #             # Get stats for the container
+    #             stats_response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=false')
+    #             stats = stats_response.json()
                 
-                # Extract CPU and memory usage
-                cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
-                mem_usage = stats['memory_stats']['usage']
+    #             # Extract CPU and memory usage
+    #             cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
+    #             mem_usage = stats['memory_stats']['usage']
                 
-                self.fast_payload[f"container_{container_name}_cpu"] = {
-                    "usage": cpu_usage,
-                    "attrs": {
-                        "container_id": container_id,
-                        "container_name": container_name
-                    }
-                }
+    #             self.fast_payload[f"container_{container_name}_cpu"] = {
+    #                 "usage": cpu_usage,
+    #                 "attrs": {
+    #                     "container_id": container_id,
+    #                     "container_name": container_name
+    #                 }
+    #             }
                 
-                self.fast_payload[f"container_{container_name}_mem"] = {
-                    "usage": mem_usage,
-                    "attrs": {
-                        "container_id": container_id,
-                        "container_name": container_name
-                    }
-                }
+    #             self.fast_payload[f"container_{container_name}_mem"] = {
+    #                 "usage": mem_usage,
+    #                 "attrs": {
+    #                     "container_id": container_id,
+    #                     "container_name": container_name
+    #                 }
+    #             }
                 
-        except requests_unixsocket.exceptions.ConnectionError as e:
-            print(f"Error connecting to Docker socket: {e}")
+    #     except requests_unixsocket.exceptions.ConnectionError as e:
+    #         print(f"Error connecting to Docker socket: {e}")
 
     def update_disk_status(self) -> Dict[str, Dict]:
         """Get disk power status for multiple disks using hdparm in batch"""
@@ -510,7 +510,9 @@ class LinuxSystemMonitor:
         cmd = ["lsblk", "-o", "NAME,SIZE,FSUSED,FSAVAIL,FSTYPE,FSSIZE,MOUNTPOINT", "-J", "-b"]
         cmd.extend(self.block_to_serial.keys())  # Add block devices to check
         output = self.run_command(cmd)
-
+        print(self.block_to_serial)
+        print(f"Running lsblk command: {' '.join(cmd)}")
+        print(f"lsblk output: {output}")
         try:
             data = json.loads(output)
             blockdevices = data.get("blockdevices", [])
@@ -755,7 +757,7 @@ class LinuxSystemMonitor:
             },
             "o": {
                 "name": "linux_mqtt_ha",
-                "sw": "2.1",
+                "sw": "2.1.1",
                 "url": "https://github.com/susembed/linux_mqtt_ha"
             },
             "cmps": {}
@@ -1174,8 +1176,6 @@ class LinuxSystemMonitor:
         
         if not output:
             return self.disk_serial_mapping
-        
-        self.block_to_serial = {}
         try:
             data = json.loads(output)
             new_mapping = {}
