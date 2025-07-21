@@ -26,11 +26,11 @@ try:
 except ImportError:
     print("Warning: python-dotenv not installed. Install with: pip install python-dotenv")
     sys.exit(1)
-# try:
-#     import requests_unixsocket
-# except ImportError:
-#     print("Warning: requests_unixsocket not installed. Install with: pip install requests-unixsocket")
-#     sys.exit(1)
+try:
+    import requests_unixsocket
+except ImportError:
+    print("Warning: requests_unixsocket not installed. Install with: pip install requests-unixsocket")
+    sys.exit(1)
 
 class LinuxSystemMonitor:
     def __init__(self):
@@ -108,6 +108,8 @@ class LinuxSystemMonitor:
         self.slow_payload = {}
         self.disk_info_payload = {}
         self.cpu_core_count = None
+        self.container_id_to_name = {}  # Maps container ID to name
+        self.container_pre_read = {}
 
         self.slow_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/slow"  
         self.fast_topic = f"{self.ha_discovery_prefix}/linux_ha_mqtt_{self.device_id}/fast"  
@@ -442,46 +444,64 @@ class LinuxSystemMonitor:
                 "free": 0,
             }
         }
-    # def update_container_stats(self) :
-    #     """Get Docker container stats using requests_unixsocket"""
-    #     try:
-    #         session = requests_unixsocket.Session()
-    #         for container_id in self.container_ids:
-    #             response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=true')
-    #             containers = response.json()
+    
+    # On I3-4005U, it takes:
+    # 4.5ms for a response from /containers/{container_id}/stats
+    # 4.3ms for a response from /containers/{container_id}/json
+    def update_container_stats(self, update_mapping: bool = False):
+        """Get Docker container stats using requests_unixsocket"""
+        try:
+            session = requests_unixsocket.Session()
+            for container_id in self.container_ids:
+                response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/json')
+                if response.status_code != 200:
+                    continue
+                info = response.json()
+                container_name = info.get('Name', '').lstrip('/')
+                if update_mapping:
+                    # Update container ID to name mapping
+                    self.container_id_to_name[container_id] = container_name
+                    if self.dry_run:
+                        print(f"[DRY RUN] Updated mapping: {container_id} -> {container_name}")
+                status = info.get('State', {}).get('Status', 'unknown')
+                self.slow_payload[f"container_{container_id}_status"] = status
+                self.slow_payload[f"container_{container_id}_info"] = {
+                    "id": container_id,
+                    "name": container_name,
+                    "created": info.get('Created', ''),
+                    "image": info.get('Image', ''),
+                }
+                if status != 'running':
+                    continue
 
-    #             for container in containers:
-    #                 container_id = container['Id']
-    #                 container_name = container['Names'][0].lstrip('/')
+                stats = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=true').json()
+                if self.container_pre_read.get("time", 0):
+                    time_diff = time.time() - self.container_pre_read["time"]
+                    self.container_pre_read["time"] = time.time()
+                    cur_cpu_time = stats['cpu_stats']['cpu_usage']['total_usage']
+                    cores = stats['cpu_stats']['online_cpus']
+                    cpu_load = round((cur_cpu_time - self.container_pre_read[container_id]["cpu_time"])/1e9/time_diff/cores, 2) if cores else 0.0
+                    self.slow_payload[f"container_{container_id}_cpu"]["usage"] = cpu_load
+                    self.slow_payload[f"container_{container_id}_cpu"]["attrs"] = {
+                        "total": round(cur_cpu_time/ 1e9,2), 
+                        "sys": round(stats['cpu_stats']['cpu_usage']['usage_in_kernelmode'] / 1e9, 2),
+                        "user": round(stats['cpu_stats']['cpu_usage']['usage_in_usermode'] / 1e9, 2),
+                        "cores": cores,
+                        "time_diff": round(time_diff, 3)
+                    }
+                    self.container_pre_read[container_id]["cpu_time"] = cur_cpu_time
+                    self.slow_payload[f"container_{container_id}_mem"]["usage"] = round(stats['memory_stats']['usage']/1e6, 0)
+                    self.slow_payload[f"container_{container_id}_mem"]["attrs"] = {
+                        "limit": round(stats['memory_stats']['limit']/1e6, 0),
+                    }
+                else:
+                    self.container_pre_read[container_id]["cpu_time"] = stats['cpu_stats']['cpu_usage']['total_usage']
+                    self.container_pre_read["time"] = time.time()
                 
-    #             # Get stats for the container
-    #             stats_response = session.get(f'http+unix://%2Fvar%2Frun%2Fdocker.sock/containers/{container_id}/stats?stream=false')
-    #             stats = stats_response.json()
-                
-    #             # Extract CPU and memory usage
-    #             cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
-    #             mem_usage = stats['memory_stats']['usage']
-                
-    #             self.fast_payload[f"container_{container_name}_cpu"] = {
-    #                 "usage": cpu_usage,
-    #                 "attrs": {
-    #                     "container_id": container_id,
-    #                     "container_name": container_name
-    #                 }
-    #             }
-                
-    #             self.fast_payload[f"container_{container_name}_mem"] = {
-    #                 "usage": mem_usage,
-    #                 "attrs": {
-    #                     "container_id": container_id,
-    #                     "container_name": container_name
-    #                 }
-    #             }
-                
-    #     except requests_unixsocket.exceptions.ConnectionError as e:
-    #         print(f"Error connecting to Docker socket: {e}")
+        except requests_unixsocket.exceptions.ConnectionError as e:
+            print(f"Error connecting to Docker socket: {e}")
 
-    def update_disk_status(self) -> Dict[str, Dict]:
+    def update_disk_status(self) :
         """Get disk power status for multiple disks using hdparm in batch"""
         disk_paths = self.disk_path_mapping.keys()
         if not disk_paths:
@@ -510,7 +530,6 @@ class LinuxSystemMonitor:
         cmd = ["lsblk", "-o", "NAME,SIZE,FSUSED,FSAVAIL,FSTYPE,FSSIZE,MOUNTPOINT", "-J", "-b"]
         cmd.extend(self.block_to_serial.keys())  # Add block devices to check
         output = self.run_command(cmd)
-        print(self.block_to_serial)
         try:
             data = json.loads(output)
             blockdevices = data.get("blockdevices", [])
@@ -1072,7 +1091,7 @@ class LinuxSystemMonitor:
     def publish_slow_sensors(self):
         """Publish slow interval sensors (SMART data)"""
         # print("Publishing slow interval sensors (SMART data)...")
-
+        self.update_container_stats()
         for serial, disk_path in self.disk_serial_mapping.items():
             if serial not in self.ignore_disks_for_smart:
                 if ("disk_smart" not in self.ignore_sensors):
@@ -1136,7 +1155,8 @@ class LinuxSystemMonitor:
         print(f"Root disk: {self.root_disk}")
         # Update disk mapping, this also update discovery
         self.update_disk_mapping()
-
+        if "container" not in self.ignore_sensors:
+            self.update_container_stats(True)  # Get initial container stats
         if self.dry_run:
             print("DRY RUN MODE: Will only print MQTT messages, not publish them")
         
