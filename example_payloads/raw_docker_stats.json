@@ -1,0 +1,98 @@
+{
+    "name": "/nginx-proxy-manager",
+    "id": "1743d904fa87fbc1dc0a9ff1ac5ae9461466e4e65eb20171466348809b750d0e",
+    "read": "2025-07-20T10:44:59.240866545Z",
+    "preread": "0001-01-01T00:00:00Z",
+    "pids_stats": {
+        "current": 27,
+        "limit": 4535
+    },
+    "blkio_stats": {
+        "io_service_bytes_recursive": [
+            {
+                "major": 8,
+                "minor": 0,
+                "op": "read",
+                "value": 30822965248
+            },
+            {
+                "major": 8,
+                "minor": 0,
+                "op": "write",
+                "value": 222815473664
+            }
+        ],
+        "io_serviced_recursive": null,
+        "io_queue_recursive": null,
+        "io_service_time_recursive": null,
+        "io_wait_time_recursive": null,
+        "io_merged_recursive": null,
+        "io_time_recursive": null,
+        "sectors_recursive": null
+    },
+    "num_procs": 0,
+    "storage_stats": {},
+    "cpu_stats": {
+        "cpu_usage": {
+            "total_usage": 2500490070000,
+            "usage_in_kernelmode": 1623335331000,
+            "usage_in_usermode": 877154739000
+        },
+        "system_cpu_usage": 5451517880000000,
+        "online_cpus": 4,
+        "throttling_data": {
+            "periods": 0,
+            "throttled_periods": 0,
+            "throttled_time": 0
+        }
+    },
+    "precpu_stats": {
+        "cpu_usage": {
+            "total_usage": 0,
+            "usage_in_kernelmode": 0,
+            "usage_in_usermode": 0
+        },
+        "throttling_data": {
+            "periods": 0,
+            "throttled_periods": 0,
+            "throttled_time": 0
+        }
+    },
+    "memory_stats": {
+        "usage": 78819328,
+        "stats": {
+            "active_anon": 27627520,
+            "active_file": 9220096,
+            "anon": 55066624,
+            "anon_thp": 6291456,
+            "file": 14659584,
+            "file_dirty": 0,
+            "file_mapped": 12734464,
+            "file_writeback": 0,
+            "inactive_anon": 27848704,
+            "inactive_file": 5414912,
+            "kernel_stack": 442368,
+            "pgactivate": 398964,
+            "pgdeactivate": 1595819,
+            "pgfault": 2034946,
+            "pglazyfree": 0,
+            "pglazyfreed": 0,
+            "pgmajfault": 53959,
+            "pgrefill": 1865050,
+            "pgscan": 22880311,
+            "pgsteal": 21717265,
+            "shmem": 24576,
+            "slab": 5465840,
+            "slab_reclaimable": 4819920,
+            "slab_unreclaimable": 645920,
+            "sock": 0,
+            "thp_collapse_alloc": 265,
+            "thp_fault_alloc": 3,
+            "unevictable": 0,
+            "workingset_activate": 0,
+            "workingset_nodereclaim": 0,
+            "workingset_refault": 0
+        },
+        "limit": 4016685056
+    }
+}
