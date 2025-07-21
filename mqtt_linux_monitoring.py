@@ -511,8 +511,6 @@ class LinuxSystemMonitor:
         cmd.extend(self.block_to_serial.keys())  # Add block devices to check
         output = self.run_command(cmd)
         print(self.block_to_serial)
-        print(f"Running lsblk command: {' '.join(cmd)}")
-        print(f"lsblk output: {output}")
         try:
             data = json.loads(output)
             blockdevices = data.get("blockdevices", [])
