@@ -94,5 +94,17 @@
             "workingset_refault": 0
         },
         "limit": 4016685056
+    },
+    "networks": {
+        "eth0": {
+            "rx_bytes": 66292727352,
+            "rx_packets": 379473846,
+            "rx_errors": 0,
+            "rx_dropped": 0,
+            "tx_bytes": 443746073128,
+            "tx_packets": 836107424,
+            "tx_errors": 0,
+            "tx_dropped": 0
+        }
     }
 }
