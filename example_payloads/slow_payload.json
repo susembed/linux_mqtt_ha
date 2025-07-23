@@ -1,41 +1,155 @@
 {
-    "disk_smart_L02139J006880": {
-        "smart_passed": 0,
-        "temperature": 48,
+    "container_b024cf9d0c2b_status": "running",
+    "container_b024cf9d0c2b_info": {
+        "id": "b024cf9d0c2b",
+        "name": "nginx-proxy-manager",
+        "created": "2025-07-04T14:59:03.824555471Z",
+        "started_at": "2025-07-04T14:59:03.863746185Z"
+    },
+    "container_45004433cb59_status": "running",
+    "container_45004433cb59_info": {
+        "id": "45004433cb59",
+        "name": "qbittorrent-nox",
+        "created": "2025-07-04T14:41:49.516516306Z",
+        "started_at": "2025-07-04T14:41:49.557572376Z"
+    },
+    "container_b024cf9d0c2b_disk_io": {
+        "read": 0.0,
+        "write": 0.0
+    },
+    "container_b024cf9d0c2b_cpu": {
+        "usage": 0.01,
         "attrs": {
-            "new_bad_blk_cnt": "0",
-            "power_on_hours": "5360",
-            "power_cycle_count": "2706",
-            "ssd_protect_mode": "0",
-            "sata_phy_error_cnt": "1",
-            "bad_block_cnt": "7864350",
-            "program_fail_cnt": "0",
-            "erase_fail_cnt": "0",
-            "erase_cnt": "360785444967",
-            "bad_cluster_cnt": "0",
-            "read_retry_cnt": "0",
-            "spare_blk_cnt_left": "1580",
+            "total": 2726.15,
+            "sys": 1751.18,
+            "user": 974.96,
+            "cores": 4,
+            "time_diff": 31.78
+        }
+    },
+    "container_b024cf9d0c2b_mem": {
+        "usage": 90.0,
+        "attrs": {
+            "limit": 4017.0
+        }
+    },
+    "container_45004433cb59_disk_io": {
+        "read": 800779.250136873,
+        "write": 0.0
+    },
+    "container_45004433cb59_net": {
+        "rx": 22445,
+        "tx": 197115
+    },
+    "container_45004433cb59_cpu": {
+        "usage": 2.75,
+        "attrs": {
+            "total": 170410.32,
+            "sys": 39149.44,
+            "user": 131260.88,
+            "cores": 4,
+            "time_diff": 31.78
+        }
+    },
+    "container_45004433cb59_mem": {
+        "usage": 2786.0,
+        "attrs": {
+            "limit": 4017.0
+        }
+    },
+    "disk_smart_XSMB2131780766": {
+        "smart_passed": 1,
+        "temperature": 40,
+        "attrs": {
+            "raw_read_error_rate": "0",
+            "reallocated_sector_ct": "0",
+            "power_on_hours": "7944",
+            "power_cycle_count": "3071",
+            "attribute_161": "0",
+            "attribute_162": "61964",
+            "attribute_163": "3000",
+            "attribute_164": "99",
+            "attribute_166": "11",
+            "attribute_167": "0",
+            "attribute_168": "0",
+            "attribute_169": "100",
+            "attribute_171": "0",
+            "attribute_172": "0",
+            "attribute_174": "202",
+            "program_fail_count_chip": "0",
+            "program_fail_cnt_total": "55362473",
             "reported_uncorrect": "0",
-            "power-off_retract_count": "520",
-            "temperature_celsius": "48 (Min/Max 48/48)",
+            "temperature_celsius": "40",
+            "hardware_ecc_recovered": "0",
+            "reallocated_event_count": "0",
             "udma_crc_error_count": "0",
-            "min_erase_cnt": "84",
-            "max_erase_cnt": "125",
-            "avg_erase_cnt": "103",
-            "slc_min_erase_cnt": "1748",
-            "slc_max_erase_cnt": "3466",
-            "slc_avg_erase_cnt": "2642",
-            "ssd_life_left": "6",
-            "total_lbas_written": "5877",
-            "total_lbas_read": "5084",
-            "bit_error_cnt": "0",
+            "attribute_206": "58",
+            "attribute_207": "132",
+            "available_reservd_space": "100",
+            "total_lbas_written": "6923",
+            "total_lbas_read": "5854",
+            "attribute_249": "5384",
+            "read_error_retry_rate": "7854",
             "supported": true
         }
     },
-    "disk_smart_50026B76852BE5D2": {
-        "smart_passed": 0,
-        "temperature": 39,
+    "disk_smart_5VEQ0JN8": {
+        "smart_passed": 1,
+        "temperature": 32,
         "attrs": {
+            "raw_read_error_rate": "170565567",
+            "spin_up_time": "0",
+            "start_stop_count": "4819",
+            "reallocated_sector_ct": "1",
+            "seek_error_rate": "210038147",
+            "power_on_hours": "10040",
+            "spin_retry_count": "0",
+            "power_cycle_count": "4715",
+            "end-to-end_error": "0",
+            "reported_uncorrect": "33",
+            "command_timeout": "2",
+            "high_fly_writes": "0",
+            "airflow_temperature_cel": "32 (Min/Max 28/40)",
+            "g-sense_error_rate": "85",
+            "power-off_retract_count": "424",
+            "load_cycle_count": "43053",
+            "temperature_celsius": "32 (0 21 0 0 0)",
+            "hardware_ecc_recovered": "170565567",
+            "current_pending_sector": "1",
+            "offline_uncorrectable": "1",
+            "udma_crc_error_count": "0",
+            "free_fall_sensor": "0",
+            "supported": true
+        }
+    },
+    "disk_smart_562RC808T": {
+        "smart_passed": 1,
+        "temperature": 36,
+        "attrs": {
+            "raw_read_error_rate": "0",
+            "throughput_performance": "0",
+            "spin_up_time": "1142",
+            "start_stop_count": "16644",
+            "reallocated_sector_ct": "0",
+            "seek_error_rate": "0",
+            "seek_time_performance": "0",
+            "power_on_hours": "5676",
+            "spin_retry_count": "0",
+            "power_cycle_count": "2833",
+            "g-sense_error_rate": "1248",
+            "power-off_retract_count": "90",
+            "load_cycle_count": "106980",
+            "temperature_celsius": "36 (Min/Max 10/48)",
+            "reallocated_event_count": "0",
+            "current_pending_sector": "0",
+            "offline_uncorrectable": "0",
+            "udma_crc_error_count": "3",
+            "disk_shift": "0",
+            "loaded_hours": "5167",
+            "load_retry_count": "0",
+            "load_friction": "0",
+            "load-in_time": "267",
+            "head_flying_hours": "0",
             "supported": true
         }
     }
