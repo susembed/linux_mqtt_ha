@@ -2,6 +2,8 @@
 
 A comprehensive Python script that monitors Linux system metrics and publishes them to an MQTT broker with Home Assistant autodiscovery support.
 
+<img width="667" alt="image" src="https://github.com/user-attachments/assets/d336e327-39e9-4811-81dd-ce25f60149bc" /><img width="330"  alt="image" src="https://github.com/user-attachments/assets/0de96f8f-1ebb-4236-a34d-c69ac40ca0b5" />
+
 ## Features
 
 - **CPU Monitoring**: Usage percentage and temperature with individual core temperatures
