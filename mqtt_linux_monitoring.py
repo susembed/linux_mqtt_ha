@@ -888,7 +888,7 @@ class LinuxSystemMonitor:
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json.cpu_avg | tojson }}",
-                "value_template": "{{ 100 - (value_json.cpu_avg.idle | float(0)) }}",
+                "value_template": "{{ (value_json.cpu_avg.user | float(0)) + (value_json.cpu_avg.sys | float(0)) + (value_json.cpu_avg.nice | float(0))}}",
                 "icon": "mdi:cpu-64-bit",
                 "unique_id": f"{self.device_id}_cpu_usage",
                 "state_class": "measurement"
