@@ -1035,7 +1035,7 @@ class LinuxSystemMonitor:
                     "device_class": "data_rate"
                 }
         # Disk sensors
-        for serial in self.disk_serial_mapping:
+        for serial, disk_path in self.disk_serial_mapping.items():
             # display_name = self.get_disk_display_name(serial)
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
             #### Rewrite this part to device_discovery
@@ -1128,7 +1128,7 @@ class LinuxSystemMonitor:
                     "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
                     "state_class": "measurement"
                 }
-            if "disk_status" not in self.ignore_sensors:
+            if "disk_status" not in self.ignore_sensors and not re.match(r'^/dev/(mmc)', disk_path):
                 dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} status",
