@@ -119,8 +119,6 @@ class LinuxSystemMonitor:
         self.auth = None
         self.tls = None
         
-        # Topic storage
-        self.topics = {}
         
     def check_dependencies(self) -> bool:
         """Check if required system tools are available"""
@@ -245,7 +243,9 @@ class LinuxSystemMonitor:
             
             # Use disk I/O stats directly from iostat data
             if disk_name in disk_data:
-                self.fast_payload[f"disk_io_{serial}"] = disk_data[disk_name]
+
+                safe_serial = serial.replace('-', '_').replace(' ', '_') 
+                self.fast_payload[f"disk_io_{safe_serial}"] = disk_data[disk_name]
     
     def update_cpu_temperature(self):
         """Get CPU temperature using JSON output from sensors"""
@@ -596,7 +596,9 @@ class LinuxSystemMonitor:
             elif "drive state is:" in line and current_device:
                 # Extract status after "drive state is:"
                 status = line.split("drive state is:")[1].strip()
-                self.fast_payload[f"disk_status_{self.disk_path_mapping.get(current_device, 'unknown')}"] = {"status": status}
+                serial = self.disk_path_mapping.get(current_device, "unknown")
+                safe_serial = serial.replace('-', '_').replace(' ', '_')
+                self.fast_payload[f"disk_status_{safe_serial}"] = {"status": status}
 
                 current_device = None
         return
@@ -622,8 +624,10 @@ class LinuxSystemMonitor:
                 fsavail = safe_int(block.get("fsavail", "0"))
                 usage_percent = float(round(fsused/(fsused+fsavail)*100 , 2)) if fsused > 0 or fsavail > 0  else 0.0
 
-                serial = self.block_to_serial.get(f"/dev/{block.get('name', 'unknown')}", "unknown")
-                self.fast_payload[f"disk_usage_{serial}"] = {
+                serial = self.block_to_serial.get(f"/dev/{block.get('name', 'unknown')}", "u nknown")
+                
+                safe_serial = serial.replace('-', '_').replace(' ', '_') 
+                self.fast_payload[f"disk_usage_{safe_serial}"] = {
                     "usage_percent": usage_percent,
                     "attrs": {
                         "mount_point": block.get("mountpoint", "unmounted"),
@@ -869,7 +873,6 @@ class LinuxSystemMonitor:
                 "unique_id": f"{self.device_id}_monitoring",
             }
         if "last_boot" not in self.ignore_sensors:
-            self.topics['uptime'] = f"{self.ha_discovery_prefix}/sensor/{self.device_id}_uptime/state"
             dev_discovery["cmps"][f"{self.device_id}_last_boot"] = {
                 "p": "sensor",
                 "name": "Last boot",
@@ -888,7 +891,7 @@ class LinuxSystemMonitor:
                 "state_topic": self.fast_topic,
                 "json_attributes_topic": self.fast_topic,
                 "json_attributes_template": "{{ value_json.cpu_avg | tojson }}",
-                "value_template": "{{ 100 - (value_json.cpu_avg.idle | float(0)) }}",
+                "value_template": "{{ (value_json.cpu_avg.user | float(0)) + (value_json.cpu_avg.system | float(0)) + (value_json.cpu_avg.nice | float(0))}}",
                 "icon": "mdi:cpu-64-bit",
                 "unique_id": f"{self.device_id}_cpu_usage",
                 "state_class": "measurement"
@@ -1032,7 +1035,7 @@ class LinuxSystemMonitor:
                     "device_class": "data_rate"
                 }
         # Disk sensors
-        for serial in self.disk_serial_mapping:
+        for serial, disk_path in self.disk_serial_mapping.items():
             # display_name = self.get_disk_display_name(serial)
             safe_serial = serial.replace('-', '_').replace(' ', '_')  # Make serial safe for MQTT topics
             #### Rewrite this part to device_discovery
@@ -1049,8 +1052,8 @@ class LinuxSystemMonitor:
                         "name": f"{disk_name} SMART health",
                         "state_topic": self.slow_topic,
                         "json_attributes_topic": self.slow_topic,
-                        "json_attributes_template": f"{{{{ value_json.disk_smart_{serial}.attrs | tojson }}}}",
-                        "value_template": f"{{{{'OFF' if value_json.disk_smart_{serial}.smart_passed|int(0) == 1 else 'ON'}}}}",
+                        "json_attributes_template": f"{{{{ value_json.disk_smart_{safe_serial}.attrs | tojson }}}}",
+                        "value_template": f"{{{{'OFF' if value_json.disk_smart_{safe_serial}.smart_passed|int(0) == 1 else 'ON'}}}}",
                         "device_class": "problem",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_smart_{safe_serial}",
@@ -1060,7 +1063,7 @@ class LinuxSystemMonitor:
                         "p": "sensor",
                         "name": f"{disk_name} temperature",
                         "state_topic": self.slow_topic,
-                        "value_template": f"{{{{ value_json.disk_smart_{serial}.temperature }}}}",
+                        "value_template": f"{{{{ value_json.disk_smart_{safe_serial}.temperature }}}}",
                         "unit_of_measurement": "°C",
                         "device_class": "temperature",
                         "icon": "mdi:thermometer",
@@ -1073,8 +1076,8 @@ class LinuxSystemMonitor:
                         "name": f"{disk_name} info",
                         "state_topic": self.disk_info_topic,
                         "json_attributes_topic": self.disk_info_topic,
-                        "json_attributes_template": f"{{{{ value_json['{serial}'] | tojson }}}}",
-                        "value_template": f"{{{{ value_json['{serial}'].model_name }}}}",
+                        "json_attributes_template": f"{{{{ value_json['{safe_serial}'] | tojson }}}}",
+                        "value_template": f"{{{{ value_json['{safe_serial}'].model_name }}}}",
                         # "device_class": "diagnostic",
                         "icon": "mdi:harddisk",
                         "unique_id": f"{self.device_id}_disk_info_{safe_serial}",
@@ -1084,7 +1087,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": f"{disk_name} write speed",
                     "state_topic": self.fast_topic,
-                    "value_template": f"{{{{ value_json.disk_io_{serial}.write_kbs | float(0) }}}}",
+                    "value_template": f"{{{{ value_json.disk_io_{safe_serial}.write_kbs | float(0) }}}}",
                     "unit_of_measurement": "kB/s",
                     "device_class": "data_rate",
                     "icon": "mdi:harddisk",
@@ -1095,7 +1098,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": f"{disk_name} read speed",
                     "state_topic": self.fast_topic,
-                    "value_template": f"{{{{ value_json.disk_io_{serial}.read_kbs | float(0) }}}}",
+                    "value_template": f"{{{{ value_json.disk_io_{safe_serial}.read_kbs | float(0) }}}}",
                     "unit_of_measurement": "kB/s",
                     "device_class": "data_rate",
                     "icon": "mdi:harddisk",
@@ -1106,7 +1109,7 @@ class LinuxSystemMonitor:
                     "p": "sensor",
                     "name": f"{disk_name} utilization",
                     "state_topic": self.fast_topic,
-                    "value_template": f"{{{{ value_json.disk_io_{serial}.util | float(0) }}}}",
+                    "value_template": f"{{{{ value_json.disk_io_{safe_serial}.util | float(0) }}}}",
                     "unit_of_measurement": "%",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_util_{safe_serial}",
@@ -1118,24 +1121,23 @@ class LinuxSystemMonitor:
                     "name": f"{disk_name} usage",
                     "state_topic": self.fast_topic,
                     "json_attributes_topic": self.fast_topic,
-                    "json_attributes_template": f"{{{{ value_json.disk_usage_{serial}.attrs | tojson }}}}",
-                    "value_template": f"{{{{ value_json.disk_usage_{serial}.usage_percent }}}}",
+                    "json_attributes_template": f"{{{{ value_json.disk_usage_{safe_serial}.attrs | tojson }}}}",
+                    "value_template": f"{{{{ value_json.disk_usage_{safe_serial}.usage_percent }}}}",
                     "unit_of_measurement": "%",
                     "icon": "mdi:harddisk",
                     "unique_id": f"{self.device_id}_disk_usage_{safe_serial}",
                     "state_class": "measurement"
                 }
-            if "disk_status" not in self.ignore_sensors:
+            if "disk_status" not in self.ignore_sensors and not re.match(r'^/dev/(mmc)', disk_path):
                 dev_discovery["cmps"][f"{self.device_id}_disk_status_{safe_serial}"] = {
                     "p": "sensor",
                     "name": f"{disk_name} status",
                     "state_topic": self.fast_topic,
-                    "value_template": f"{{{{ value_json.disk_status_{serial}.status }}}}",
+                    "value_template": f"{{{{ value_json.disk_status_{safe_serial}.status }}}}",
                     "icon": "mdi:power",
                     "unique_id": f"{self.device_id}_disk_status_{safe_serial}",
                 }
         if "net_stats" not in self.ignore_sensors:
-            self.topics['net_stats'] = {}
             for if_name in self.ifs_name:
                 safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
                 if "net_rx" not in self.ignore_sensors :
@@ -1201,7 +1203,8 @@ class LinuxSystemMonitor:
         disk_info_payload = {}
 
         for serial, disk_path in self.disk_serial_mapping.items():
-            disk_info_payload[f"{serial}"] = self.get_disk_info(disk_path)
+            safe_serial = serial.replace('-', '_').replace(' ', '_') 
+            disk_info_payload[f"{safe_serial}"] = self.get_disk_info(disk_path)
         self.mqtt_publish(self.disk_info_topic, json.dumps(disk_info_payload), True)
     def update_network_sensors(self):
         """Publish network interface sensors"""
@@ -1253,7 +1256,8 @@ class LinuxSystemMonitor:
         for serial, disk_path in self.disk_serial_mapping.items():
             if serial not in self.ignore_disks_for_smart:
                 if ("disk_smart" not in self.ignore_sensors):
-                    self.slow_payload[f"disk_smart_{serial}"] = self.get_disk_smart(disk_path)
+                    safe_serial = serial.replace('-', '_').replace(' ', '_') 
+                    self.slow_payload[f"disk_smart_{safe_serial}"] = self.get_disk_smart(disk_path)
         self.mqtt_publish(self.slow_topic, json.dumps(self.slow_payload))
     def publish_fast_sensors(self):
         """Publish fast interval sensors"""
