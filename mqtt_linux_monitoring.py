@@ -1199,7 +1199,7 @@ class LinuxSystemMonitor:
                             "name": f"{if_name} Rx speed",
                             "state_topic": self.fast_topic,
                             "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.rx_speed | int(0) }}}}", 
-                            "unit_of_measurement": "B/s",
+                            "unit_of_measurement": "kB/s",
                             "device_class": "data_rate",
                             "icon": "mdi:download",
                             "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
@@ -1211,7 +1211,7 @@ class LinuxSystemMonitor:
                             "name": f"{if_name} Tx speed",
                             "state_topic": self.fast_topic,
                             "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.tx_speed | int(0) }}}}", 
-                            "unit_of_measurement": "B/s",
+                            "unit_of_measurement": "kB/s",
                             "device_class": "data_rate",
                             "icon": "mdi:upload",
                             "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
@@ -1294,13 +1294,13 @@ class LinuxSystemMonitor:
                     if rx_delta < 0:
                         rx_speed = 0
                     else:
-                        rx_speed = int(rx_delta / self.fast_interval)
+                        rx_speed = int(rx_delta / self.fast_interval / 1000)
                 with open(f'/sys/class/net/{ifname}/statistics/tx_bytes', 'r') as f:
                     tx_delta = int(f.read().strip()) - self.if_statistics[ifname]["tx_bytes"]
                     if tx_delta < 0:
                         tx_speed = 0
                     else:
-                        tx_speed = int(tx_delta / self.fast_interval)
+                        tx_speed = int(tx_delta / self.fast_interval / 1000)
                 
                 # Use the correct topic from discovery configuration
                 safe_ifname = ifname.replace(".", "_")
