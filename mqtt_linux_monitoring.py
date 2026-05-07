@@ -17,7 +17,7 @@ import signal
 import sys
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import paho.mqtt.publish as publish
 import ssl
 # Load environment variables from .env file
@@ -51,6 +51,9 @@ class LinuxSystemMonitor:
 
         interfaces_str = get_env_var('NETWORK_INTERFACES', 'eth0')
         self.ifs_name = [iface.strip() for iface in interfaces_str.split(",") if iface.strip()]
+
+        vir_interfaces_str = get_env_var('VIRTUAL_INTERFACES', '')
+        self.virtual_ifs_name = [iface.strip() for iface in vir_interfaces_str.split(",") if iface.strip()]
         
         container_ids_str = get_env_var('CONTAINER_IDS', '')
         self.container_ids = [cid.strip() for cid in container_ids_str.split(",") if cid.strip()] if container_ids_str else []
@@ -1140,30 +1143,31 @@ class LinuxSystemMonitor:
         if "net_stats" not in self.ignore_sensors:
             for if_name in self.ifs_name:
                 safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_')  # Make interface name safe for MQTT topics
-                if "net_rx" not in self.ignore_sensors :
-                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
-                        "p": "sensor",
-                        "name": f"{if_name} Rx speed",
-                        "state_topic": self.fast_topic,
-                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.rx_speed | int(0) }}}}", 
-                        "unit_of_measurement": "B/s",
-                        "device_class": "data_rate",
-                        "icon": "mdi:download",
-                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
-                        "state_class": "measurement"
+                if not self.virtual_ifs_name :
+                    if "net_rx" not in self.ignore_sensors :
+                        dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
+                            "p": "sensor",
+                            "name": f"{if_name} Rx speed",
+                            "state_topic": self.fast_topic,
+                            "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.rx_speed | int(0) }}}}", 
+                            "unit_of_measurement": "B/s",
+                            "device_class": "data_rate",
+                            "icon": "mdi:download",
+                            "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
+                            "state_class": "measurement"
+                            }
+                    if "net_tx" not in self.ignore_sensors:
+                        dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
+                            "p": "sensor",
+                            "name": f"{if_name} Tx speed",
+                            "state_topic": self.fast_topic,
+                            "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.tx_speed | int(0) }}}}", 
+                            "unit_of_measurement": "B/s",
+                            "device_class": "data_rate",
+                            "icon": "mdi:upload",
+                            "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
+                            "state_class": "measurement"
                         }
-                if "net_tx" not in self.ignore_sensors:
-                    dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
-                        "p": "sensor",
-                        "name": f"{if_name} Tx speed",
-                        "state_topic": self.fast_topic,
-                        "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.tx_speed | int(0) }}}}", 
-                        "unit_of_measurement": "B/s",
-                        "device_class": "data_rate",
-                        "icon": "mdi:upload",
-                        "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
-                        "state_class": "measurement"
-                    }
                 if "net_link_speed" not in self.ignore_sensors:
                     dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_link_speed"] = {
                         "p": "sensor",
@@ -1186,6 +1190,34 @@ class LinuxSystemMonitor:
                         "icon": "mdi:network",
                         "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_duplex",
                     }
+            if self.virtual_ifs_name:
+                for if_name in self.virtual_ifs_name:
+                    safe_ifname = if_name.replace('-', '_').replace(' ', '_').replace('@', '_').replace('.', '_')  # Make interface name safe for MQTT topics
+                    if "net_rx" not in self.ignore_sensors :
+                        dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_rx"] = {
+                            "p": "sensor",
+                            "name": f"{if_name} Rx speed",
+                            "state_topic": self.fast_topic,
+                            "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.rx_speed | int(0) }}}}", 
+                            "unit_of_measurement": "B/s",
+                            "device_class": "data_rate",
+                            "icon": "mdi:download",
+                            "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_rx",
+                            "state_class": "measurement"
+                            }
+                    if "net_tx" not in self.ignore_sensors:
+                        dev_discovery["cmps"][f"{self.device_id}_net_stats_{safe_ifname}_tx"] = {
+                            "p": "sensor",
+                            "name": f"{if_name} Tx speed",
+                            "state_topic": self.fast_topic,
+                            "value_template": f"{{{{ value_json.net_stats_{safe_ifname}.tx_speed | int(0) }}}}", 
+                            "unit_of_measurement": "B/s",
+                            "device_class": "data_rate",
+                            "icon": "mdi:upload",
+                            "unique_id": f"{self.device_id}_net_stats_{safe_ifname}_tx",
+                            "state_class": "measurement"
+                        }
+                
 
         self.mqtt_publish(f"{self.ha_discovery_prefix}/device/{self.device_id}/config", json.dumps(dev_discovery), True)
     
@@ -1211,10 +1243,52 @@ class LinuxSystemMonitor:
         # print(f"{time.strftime('%Y-%m-%d %H:%M:%S')}: Collecting network interface data...")
         
         for ifname in self.ifs_name:
-            if ifname not in self.if_statistics:
+            if ifname not in self.if_statistics or not self.virtual_ifs_name:
                 self.if_statistics[ifname] = {"rx_bytes": 0, "tx_bytes": 0}
             try:
                 # Get network interface statistics
+                if not self.virtual_ifs_name:
+                    with open(f'/sys/class/net/{ifname}/statistics/rx_bytes', 'r') as f:
+                        rx_delta = int(f.read().strip()) - self.if_statistics[ifname]["rx_bytes"]
+                        if rx_delta < 0:
+                            rx_speed = 0
+                        else:
+                            rx_speed = int(rx_delta / self.fast_interval)
+                    with open(f'/sys/class/net/{ifname}/statistics/tx_bytes', 'r') as f:
+                        tx_delta = int(f.read().strip()) - self.if_statistics[ifname]["tx_bytes"]
+                        if tx_delta < 0:
+                            tx_speed = 0
+                        else:
+                            tx_speed = int(tx_delta / self.fast_interval)
+                with open(f'/sys/class/net/{ifname}/speed', 'r') as f:
+                    link_speed = int(f.read().strip()) 
+                with open(f'/sys/class/net/{ifname}/duplex', 'r') as f:
+                    duplex = f.read().strip()
+                
+                safe_ifname = ifname.replace(".", "_")
+                if not self.virtual_ifs_name:
+                    self.fast_payload[f"net_stats_{safe_ifname}"] = {
+                        "rx_speed": rx_speed,  # Bytes per second
+                        "tx_speed": tx_speed,  # Bytes per second
+                        "link_speed": link_speed,
+                        "duplex": duplex,
+                    }
+                else:
+                    self.fast_payload[f"net_stats_{safe_ifname}"] = {
+                        "link_speed": link_speed,
+                        "duplex": duplex,
+                    }
+
+            except FileNotFoundError:
+                print(f"Network interface {ifname} not found, skipping.")
+                continue
+            except Exception as e:
+                print(f"Error reading network stats for {ifname}: {e}")
+                continue
+        for ifname in self.virtual_ifs_name:
+            if ifname not in self.if_statistics:
+                self.if_statistics[ifname] = {"rx_bytes": 0, "tx_bytes": 0}
+            try:
                 with open(f'/sys/class/net/{ifname}/statistics/rx_bytes', 'r') as f:
                     rx_delta = int(f.read().strip()) - self.if_statistics[ifname]["rx_bytes"]
                     if rx_delta < 0:
@@ -1227,21 +1301,14 @@ class LinuxSystemMonitor:
                         tx_speed = 0
                     else:
                         tx_speed = int(tx_delta / self.fast_interval)
-                with open(f'/sys/class/net/{ifname}/speed', 'r') as f:
-                    link_speed = int(f.read().strip()) 
-                with open(f'/sys/class/net/{ifname}/duplex', 'r') as f:
-                    duplex = f.read().strip()
                 
                 # Use the correct topic from discovery configuration
                 safe_ifname = ifname.replace(".", "_")
                 self.fast_payload[f"net_stats_{safe_ifname}"] = {
                     "rx_speed": rx_speed,  # Bytes per second
                     "tx_speed": tx_speed,  # Bytes per second
-                    "link_speed": link_speed,
-                    "duplex": duplex,
                 }
-                # Use the correct topic instead of hardcoded one
-                
+
             except FileNotFoundError:
                 print(f"Network interface {ifname} not found, skipping.")
                 continue
@@ -1270,7 +1337,9 @@ class LinuxSystemMonitor:
         if "mem_usage" not in self.ignore_sensors:
             self.fast_payload["mem_usage"] = self.get_memory_usage()
         # Prepare network interface sensors before collecting iostat data
-        for ifname  in self.ifs_name:
+        if not self.virtual_ifs_name: ifs_name = self.ifs_name 
+        else: ifs_name = self.virtual_ifs_name
+        for ifname  in ifs_name:
             try:
                 if ifname not in self.if_statistics:
                     self.if_statistics[ifname] = {"rx_bytes": 0, "tx_bytes": 0}
@@ -1337,7 +1406,7 @@ class LinuxSystemMonitor:
         # Main monitoring loop
         while True:
             self.fast_payload["script"] = {
-                "last_cycle_execution_time": (float(time.time()) - last_execution if last_execution else 0),
+                "last_cycle_execution_time": round((float(time.time()) - last_execution if last_execution else 0) , 3),
                 "interval": self.fast_interval,
             }
             current_time = int(time.time())
