@@ -512,8 +512,8 @@ class LinuxSystemMonitor:
                     self.container_pre_read[container_id]["disk_io_r"] = disk_r_total
                     self.container_pre_read[container_id]["disk_io_w"] = disk_w_total
                     self.slow_payload[f"container_{container_id}_disk_io"] = {
-                        "read": disk_io_r,
-                        "write": disk_io_w,
+                        "read": disk_io_r if disk_io_r > 0 else 0,
+                        "write": disk_io_w if disk_io_w > 0 else 0,
                     }
 
                     if self.container_pre_read[container_id].get("net"):
@@ -572,7 +572,10 @@ class LinuxSystemMonitor:
                         tx_bytes = tx_bytes + net_data['tx_bytes']
                         net_exists = True
                     if net_exists:
-                        self.container_pre_read[container_id]["net"] = {"rx_bytes": rx_bytes, "tx_bytes": tx_bytes}
+                        self.container_pre_read[container_id]["net"] = {
+                            "rx_bytes": rx_bytes if rx_bytes > 0 else 0,
+                            "tx_bytes": tx_bytes if tx_bytes > 0 else 0
+                        }
                     self.container_pre_read[container_id]["time"] = time.time()
             except Exception as e:
                 print(f"Error processing container stats for {container_id}: {e}")
