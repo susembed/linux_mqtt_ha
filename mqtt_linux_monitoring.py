@@ -528,8 +528,8 @@ class LinuxSystemMonitor:
                         tx = int((tx_bytes - self.container_pre_read[container_id]["net"].get("tx_bytes", 0))/time_diff)
                         self.container_pre_read[container_id]["net"] = {"rx_bytes": rx_bytes, "tx_bytes": tx_bytes}
                         self.slow_payload[f"container_{container_id}_net"] = {
-                            "rx": rx if rx_bytes > 0 else 0,
-                            "tx": tx if tx_bytes > 0 else 0
+                            "rx": rx if rx > 0 else 0,
+                            "tx": tx if tx > 0 else 0
                         }
 
                     # Initialize payload entries if they don't exist
